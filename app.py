@@ -152,7 +152,7 @@ cell1 = {"Jph": Jph1, "J0": J01, "n": float(n1), "Rs": float(Rs1), "Rsh": float(
 cell2 = {"Jph": Jph2, "J0": J02, "n": float(n2), "Rs": float(Rs2), "Rsh": float(Rsh2), "T": float(T2)}
 
 # Gemeinsames J-Gitter: von 0 bis min(Jph1,Jph2)
-Jmax_common = min(cell1["Jph"], cell2["Jph"])
+Jmax_common = max(cell1["Jph"], cell2["Jph"])
 if Jmax_common <= 0:
     st.warning("Mindestens eine Zelle hat Jph = 0 (oder negativ). Bitte realistische Photoströme eingeben.")
 J_common = np.linspace(0.0, max(0.0, Jmax_common), max(2, int(Npts)))  # A/cm^2
