@@ -19,7 +19,7 @@ def diode_equation_V(V, J, cell):
 def estimate_Voc(cell):
     try:
         sol = root_scalar(lambda V: diode_equation_V(V, 0.0, cell),
-                          bracket=[-0.5, 1.5], method="bisect")
+                          bracket=[-0.5, 2.0], method="bisect")
         if sol.converged:
             return sol.root
     except Exception:
@@ -27,9 +27,9 @@ def estimate_Voc(cell):
     return 0.6
 
 def calculate_iv(Jph_mA, J0_mA, n, Rs, Rsh, T, Npts=400):
-    # Einheitenumrechnung
-    Jph = Jph_mA / 1000.0  # A/cm²
-    J0  = J0_mA  / 1000.0  # A/cm²
+    # Umrechnung in A/cm²
+    Jph = Jph_mA / 1000.0
+    J0  = J0_mA  / 1000.0
 
     cell = {"Jph": Jph, "J0": J0, "n": n, "Rs": Rs, "Rsh": Rsh, "T": T}
     Voc = estimate_Voc(cell)
@@ -42,7 +42,7 @@ def calculate_iv(Jph_mA, J0_mA, n, Rs, Rsh, T, Npts=400):
         V_sol = None
         try:
             sol = root_scalar(lambda V: diode_equation_V(V, J, cell),
-                              bracket=[-1.0, Voc+1.0], method="bisect")
+                              bracket=[-1.0, Voc+1.5], method="bisect")
             if sol.converged:
                 V_sol = sol.root
         except Exception:
@@ -57,9 +57,8 @@ def calculate_iv(Jph_mA, J0_mA, n, Rs, Rsh, T, Npts=400):
         V_vals[i] = V_sol
         V_prev = V_sol
 
-    # Umwandeln in mA/cm²
-    J_plot = J_vals * 1000.0
-    P_plot = V_vals * J_plot
+    J_plot = J_vals * 1000.0   # zurück in mA/cm²
+    P_plot = V_vals * J_plot   # Leistung
 
     idx_mpp = int(np.nanargmax(P_plot))
     return V_vals, J_plot, P_plot, Voc, V_vals[idx_mpp], J_plot[idx_mpp], P_plot[idx_mpp]
@@ -67,48 +66,84 @@ def calculate_iv(Jph_mA, J0_mA, n, Rs, Rsh, T, Npts=400):
 # -----------------------------
 # Streamlit UI
 # -----------------------------
-st.title("IV-Kennlinie einer Single-Junction Solarzelle")
+st.title("IV-Kennlinie einer Tandemsolarzelle (2 Teilzellen)")
 
-st.sidebar.header("Eingabeparameter (wissenschaftliche Notation erlaubt, z.B. 1e-10)")
-
+st.sidebar.header("Parameter der ersten Zelle")
 def get_input(label, default):
     val_str = st.sidebar.text_input(label, value=str(default))
     try:
         return float(val_str)
     except ValueError:
-        st.sidebar.error(f"Ungültige Eingabe für {label}. Bitte Zahl eingeben.")
+        st.sidebar.error(f"Ungültige Eingabe für {label}.")
         return float(default)
 
-# Eingaben (alle als Textfeld)
-Jph = get_input("Photostrom Jph [mA/cm²]", 30.0)
-J0  = get_input("Sättigungsstrom J0 [mA/cm²]", 1e-10)
-n   = get_input("Idealfaktor n", 1.0)
-Rs  = get_input("Serienwiderstand Rs [Ohm·cm²]", 0.2)
-Rsh = get_input("Parallelwiderstand Rsh [Ohm·cm²]", 1000.0)
-T   = get_input("Temperatur T [K]", 298.0)
+# Eingaben Zelle 1
+Jph1 = get_input("Zelle 1: Photostrom Jph [mA/cm²]", 30.0)
+J01  = get_input("Zelle 1: Sättigungsstrom J0 [mA/cm²]", 1e-10)
+n1   = get_input("Zelle 1: Idealfaktor n", 1.0)
+Rs1  = get_input("Zelle 1: Serienwiderstand Rs [Ohm·cm²]", 0.2)
+Rsh1 = get_input("Zelle 1: Parallelwiderstand Rsh [Ohm·cm²]", 1000.0)
+T1   = get_input("Zelle 1: Temperatur T [K]", 298.0)
 
-# Automatische Berechnung sobald Eingaben geändert werden
-V, J, P, Voc, V_mpp, J_mpp, P_mpp = calculate_iv(Jph, J0, n, Rs, Rsh, T)
+st.sidebar.header("Parameter der zweiten Zelle")
+# Eingaben Zelle 2
+Jph2 = get_input("Zelle 2: Photostrom Jph [mA/cm²]", 20.0)
+J02  = get_input("Zelle 2: Sättigungsstrom J0 [mA/cm²]", 1e-12)
+n2   = get_input("Zelle 2: Idealfaktor n", 1.0)
+Rs2  = get_input("Zelle 2: Serienwiderstand Rs [Ohm·cm²]", 0.2)
+Rsh2 = get_input("Zelle 2: Parallelwiderstand Rsh [Ohm·cm²]", 1000.0)
+T2   = get_input("Zelle 2: Temperatur T [K]", 298.0)
 
-st.write(f"**Leerlaufspannung Voc** = {Voc:.4f} V")
-st.write(f"**MPP**: V = {V_mpp:.4f} V, J = {J_mpp:.4f} mA/cm², P = {P_mpp:.4f} mW/cm²")
+# -----------------------------
+# Berechnung Teilzellen
+# -----------------------------
+V1, J1, P1, Voc1, V1_mpp, J1_mpp, P1_mpp = calculate_iv(Jph1, J01, n1, Rs1, Rsh1, T1)
+V2, J2, P2, Voc2, V2_mpp, J2_mpp, P2_mpp = calculate_iv(Jph2, J02, n2, Rs2, Rsh2, T2)
 
-# Plot IV
+# -----------------------------
+# Berechnung Tandemzelle
+# -----------------------------
+# Der Strom ist durch die schwächere Zelle limitiert
+J_common = np.linspace(0, min(J1.max(), J2.max()), 400)
+
+# Interpolation der Spannungen bei gegebenem Strom
+V1_interp = np.interp(J_common, J1[::-1], V1[::-1])
+V2_interp = np.interp(J_common, J2[::-1], V2[::-1])
+
+V_tandem = V1_interp + V2_interp
+P_tandem = V_tandem * J_common
+
+idx_mpp_t = int(np.nanargmax(P_tandem))
+Voc_tandem = V_tandem[0]  # bei J=0
+
+# -----------------------------
+# Ergebnisse anzeigen
+# -----------------------------
+st.write(f"**Zelle 1 Voc** = {Voc1:.4f} V, **Zelle 2 Voc** = {Voc2:.4f} V")
+st.write(f"**Tandem Voc** = {Voc_tandem:.4f} V")
+st.write(f"**Tandem MPP**: V = {V_tandem[idx_mpp_t]:.4f} V, J = {J_common[idx_mpp_t]:.4f} mA/cm², P = {P_tandem[idx_mpp_t]:.4f} mW/cm²")
+
+# -----------------------------
+# Plots
+# -----------------------------
+# IV-Kurven
 fig1, ax1 = plt.subplots()
-ax1.plot(V, J, label="IV-Kurve")
-ax1.scatter([V_mpp], [J_mpp], color="red", label="MPP")
+ax1.plot(V1, J1, label="Zelle 1")
+ax1.plot(V2, J2, label="Zelle 2")
+ax1.plot(V_tandem, J_common, label="Tandem", linewidth=2)
+ax1.scatter([V_tandem[idx_mpp_t]], [J_common[idx_mpp_t]], color="red", label="Tandem MPP")
 ax1.set_xlabel("Spannung [V]")
 ax1.set_ylabel("Stromdichte [mA/cm²]")
-ax1.grid(True)
 ax1.legend()
+ax1.grid(True)
 st.pyplot(fig1)
 
-# Plot P-V
+# P-V-Kurve Tandem
 fig2, ax2 = plt.subplots()
-ax2.plot(V, P, label="P-V-Kurve")
-ax2.scatter([V_mpp], [P_mpp], color="red", label="MPP")
+ax2.plot(V_tandem, P_tandem, label="Tandem P-V")
+ax2.scatter([V_tandem[idx_mpp_t]], [P_tandem[idx_mpp_t]], color="red", label="MPP")
 ax2.set_xlabel("Spannung [V]")
 ax2.set_ylabel("Leistung [mW/cm²]")
-ax2.grid(True)
 ax2.legend()
+ax2.grid(True)
 st.pyplot(fig2)
