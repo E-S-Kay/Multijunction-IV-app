@@ -69,36 +69,46 @@ def calculate_iv(Jph_mA, J0_mA, n, Rs, Rsh, T, Npts=400):
 # -----------------------------
 st.title("IV-Kennlinie einer Single-Junction Solarzelle")
 
-st.sidebar.header("Eingabeparameter")
-Jph = st.sidebar.number_input("Photostrom Jph [mA/cm²]", value=30.0, format="%.6e")
-J0  = st.sidebar.number_input("Sättigungsstrom J0 [mA/cm²]", value=1e-10, format="%.6e")
-n   = st.sidebar.number_input("Idealfaktor n", value=1.0)
-Rs  = st.sidebar.number_input("Serienwiderstand Rs [Ohm·cm²]", value=0.2)
-Rsh = st.sidebar.number_input("Parallelwiderstand Rsh [Ohm·cm²]", value=1000.0)
-T   = st.sidebar.number_input("Temperatur T [K]", value=298.0)
+st.sidebar.header("Eingabeparameter (wissenschaftliche Notation erlaubt, z.B. 1e-10)")
 
-if st.button("Berechnen"):
-    V, J, P, Voc, V_mpp, J_mpp, P_mpp = calculate_iv(Jph, J0, n, Rs, Rsh, T)
+def get_input(label, default):
+    val_str = st.sidebar.text_input(label, value=str(default))
+    try:
+        return float(val_str)
+    except ValueError:
+        st.sidebar.error(f"Ungültige Eingabe für {label}. Bitte Zahl eingeben.")
+        return float(default)
 
-    st.write(f"**Leerlaufspannung Voc** = {Voc:.4f} V")
-    st.write(f"**MPP**: V = {V_mpp:.4f} V, J = {J_mpp:.4f} mA/cm², P = {P_mpp:.4f} mW/cm²")
+# Eingaben (alle als Textfeld)
+Jph = get_input("Photostrom Jph [mA/cm²]", 30.0)
+J0  = get_input("Sättigungsstrom J0 [mA/cm²]", 1e-10)
+n   = get_input("Idealfaktor n", 1.0)
+Rs  = get_input("Serienwiderstand Rs [Ohm·cm²]", 0.2)
+Rsh = get_input("Parallelwiderstand Rsh [Ohm·cm²]", 1000.0)
+T   = get_input("Temperatur T [K]", 298.0)
 
-    # Plot IV
-    fig1, ax1 = plt.subplots()
-    ax1.plot(V, J, label="IV-Kurve")
-    ax1.scatter([V_mpp], [J_mpp], color="red", label="MPP")
-    ax1.set_xlabel("Spannung [V]")
-    ax1.set_ylabel("Stromdichte [mA/cm²]")
-    ax1.grid(True)
-    ax1.legend()
-    st.pyplot(fig1)
+# Automatische Berechnung sobald Eingaben geändert werden
+V, J, P, Voc, V_mpp, J_mpp, P_mpp = calculate_iv(Jph, J0, n, Rs, Rsh, T)
 
-    # Plot P-V
-    fig2, ax2 = plt.subplots()
-    ax2.plot(V, P, label="P-V-Kurve")
-    ax2.scatter([V_mpp], [P_mpp], color="red", label="MPP")
-    ax2.set_xlabel("Spannung [V]")
-    ax2.set_ylabel("Leistung [mW/cm²]")
-    ax2.grid(True)
-    ax2.legend()
-    st.pyplot(fig2)
+st.write(f"**Leerlaufspannung Voc** = {Voc:.4f} V")
+st.write(f"**MPP**: V = {V_mpp:.4f} V, J = {J_mpp:.4f} mA/cm², P = {P_mpp:.4f} mW/cm²")
+
+# Plot IV
+fig1, ax1 = plt.subplots()
+ax1.plot(V, J, label="IV-Kurve")
+ax1.scatter([V_mpp], [J_mpp], color="red", label="MPP")
+ax1.set_xlabel("Spannung [V]")
+ax1.set_ylabel("Stromdichte [mA/cm²]")
+ax1.grid(True)
+ax1.legend()
+st.pyplot(fig1)
+
+# Plot P-V
+fig2, ax2 = plt.subplots()
+ax2.plot(V, P, label="P-V-Kurve")
+ax2.scatter([V_mpp], [P_mpp], color="red", label="MPP")
+ax2.set_xlabel("Spannung [V]")
+ax2.set_ylabel("Leistung [mW/cm²]")
+ax2.grid(True)
+ax2.legend()
+st.pyplot(fig2)
