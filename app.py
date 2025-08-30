@@ -96,7 +96,7 @@ T2   = get_input("Zelle 2: Temperatur T [K]", 298.0)
 # Berechnung Tandem
 # -----------------------------
 # gemeinsamer Strom bis min(Jph1, Jph2)
-J_common = np.linspace(0, min(Jph1, Jph2), 400)
+J_common = np.linspace(0, max(Jph1, Jph2), 400)
 
 # Teilzellen-Spannungen bei gleichem J
 V1, P1, Voc1, V1_mpp, J1_mpp, P1_mpp = calculate_iv(Jph1, J01, n1, Rs1, Rsh1, T1, J_common)
