@@ -77,7 +77,7 @@ def calculate_iv(Jph_mA, J0_mA, n, Rs, Rsh, T, J_common):
     return V_vals, P_plot, Voc, Vmpp, Jmpp, Pmpp, Jsc, FF, PCE, cell
 
 def calculate_Jsc_tandem(cell1, cell2):
-    J_test = np.linspace(0, min(cell1["Jph"], cell2["Jph"]), 1000)  # A/cm²
+    J_test = np.linspace(0, max(cell1["Jph"], cell2["Jph"]), 2000)  # feineres Raster
     V_sum = np.zeros_like(J_test)
     
     for i, J in enumerate(J_test):
