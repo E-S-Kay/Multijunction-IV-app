@@ -77,22 +77,25 @@ def calculate_iv(Jph_mA, J0_mA, n, Rs, Rsh, T, J_common):
     return V_vals, P_plot, Voc, Vmpp, Jmpp, Pmpp, Jsc, FF, PCE, cell
 
 def calculate_Jsc_tandem(cell1, cell2):
-    J_test = np.linspace(0, max(cell1["Jph"], cell2["Jph"]), 2000)  # feineres Raster
-    V_sum = np.zeros_like(J_test)
-    
-    for i, J in enumerate(J_test):
+    def V_sum_for_J(J_mA):
+        J = J_mA / 1000.0  # Umrechnung in A/cm²
+        # Schätze V1 und V2
         try:
-            V1 = fsolve(lambda V: diode_equation_V(V, J, cell1), 0.0)[0]
+            V1 = fsolve(lambda V: diode_equation_V(V, J, cell1), estimate_Voc(cell1))[0]
         except:
             V1 = 0
         try:
-            V2 = fsolve(lambda V: diode_equation_V(V, J, cell2), 0.0)[0]
+            V2 = fsolve(lambda V: diode_equation_V(V, J, cell2), estimate_Voc(cell2))[0]
         except:
             V2 = 0
-        V_sum[i] = V1 + V2
-    
-    idx = np.argmin(np.abs(V_sum))  # J, bei dem V1+V2 ~ 0
-    return J_test[idx] * 1000  # zurück zu mA/cm²
+        return V1 + V2
+
+    try:
+        sol = root_scalar(V_sum_for_J, bracket=[0, max(cell1["Jph"], cell2["Jph"])*1000], method="bisect")
+        return sol.root  # mA/cm²
+    except:
+        return min(cell1["Jph"], cell2["Jph"])*1000
+
 
 
 
