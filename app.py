@@ -92,10 +92,10 @@ def calculate_Jsc_tandem(cell1, cell2):
     
     # Suche Jsc in mA/cm²
     try:
-        sol = root_scalar(lambda J_mA: V_total(J_mA/1000), bracket=[0, min(cell1["Jph"], cell2["Jph"])*1000*1.5], method="bisect")
-        return sol.root if sol.converged else min(cell1["Jph"], cell2["Jph"])*1000
+        sol = root_scalar(lambda J_mA: V_total(J_mA/1000), bracket=[0, max(cell1["Jph"], cell2["Jph"])*1000*1.5], method="bisect")
+        return sol.root if sol.converged else max(cell1["Jph"], cell2["Jph"])*1000
     except:
-        return min(cell1["Jph"], cell2["Jph"])*1000
+        return max(cell1["Jph"], cell2["Jph"])*1000
 
 
 # -----------------------------
