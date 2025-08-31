@@ -77,27 +77,26 @@ def calculate_iv(Jph_mA, J0_mA, n, Rs, Rsh, T, J_common):
     return V_vals, P_plot, Voc, Vmpp, Jmpp, Pmpp, Jsc, FF, PCE, cell
 
 def calculate_Jsc_tandem(cell1, cell2):
-    def V_total(J_mA):
-        J = J_mA / 1000.0
-        # V1 für gegebenen J
+    # Funktion, deren Nullstelle den Jsc liefert
+    def V_total(J):
+        # J in A/cm²
         try:
-            sol1 = root_scalar(lambda V: diode_equation_V(V, J, cell1), bracket=[-1.0, 2.0], method="bisect")
-            V1 = sol1.root if sol1.converged else 0
+            V1 = fsolve(lambda V: diode_equation_V(V, J, cell1), 0.0)[0]
         except:
             V1 = 0
-        # V2 für gegebenen J
         try:
-            sol2 = root_scalar(lambda V: diode_equation_V(V, J, cell2), bracket=[-1.0, 2.0], method="bisect")
-            V2 = sol2.root if sol2.converged else 0
+            V2 = fsolve(lambda V: diode_equation_V(V, J, cell2), 0.0)[0]
         except:
             V2 = 0
         return V1 + V2
     
+    # Suche Jsc in mA/cm²
     try:
-        sol = root_scalar(V_total, bracket=[0, max(cell1["Jph"], cell2["Jph"])*1000], method="bisect")
-        return sol.root  # mA/cm²
+        sol = root_scalar(lambda J_mA: V_total(J_mA/1000), bracket=[0, min(cell1["Jph"], cell2["Jph"])*1000*1.5], method="bisect")
+        return sol.root if sol.converged else min(cell1["Jph"], cell2["Jph"])*1000
     except:
         return min(cell1["Jph"], cell2["Jph"])*1000
+
 
 # -----------------------------
 # Streamlit UI
