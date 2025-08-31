@@ -77,9 +77,10 @@ def calculate_iv(Jph_mA, J0_mA, n, Rs, Rsh, T, J_common):
     return V_vals, P_plot, Voc, Vmpp, Jmpp, Pmpp, Jsc, FF, PCE, cell
 
 def calculate_Jsc_tandem(cell1, cell2):
-    # Funktion, deren Nullstelle den Jsc liefert
-    def V_total(J):
-        # J in A/cm²
+    J_test = np.linspace(0, min(cell1["Jph"], cell2["Jph"]), 1000)  # A/cm²
+    V_sum = np.zeros_like(J_test)
+    
+    for i, J in enumerate(J_test):
         try:
             V1 = fsolve(lambda V: diode_equation_V(V, J, cell1), 0.0)[0]
         except:
@@ -88,14 +89,11 @@ def calculate_Jsc_tandem(cell1, cell2):
             V2 = fsolve(lambda V: diode_equation_V(V, J, cell2), 0.0)[0]
         except:
             V2 = 0
-        return V1 + V2
+        V_sum[i] = V1 + V2
     
-    # Suche Jsc in mA/cm²
-    try:
-        sol = root_scalar(lambda J_mA: V_total(J_mA/1000), bracket=[0, max(cell1["Jph"], cell2["Jph"])*1000*1.5], method="bisect")
-        return sol.root if sol.converged else max(cell1["Jph"], cell2["Jph"])*1000
-    except:
-        return max(cell1["Jph"], cell2["Jph"])*1000
+    idx = np.argmin(np.abs(V_sum))  # J, bei dem V1+V2 ~ 0
+    return J_test[idx] * 1000  # zurück zu mA/cm²
+
 
 
 # -----------------------------
