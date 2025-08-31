@@ -14,20 +14,21 @@ st.title("Tandem-Solarzelle IV-Kennlinie")
 # Eingaben für beide Zellen
 # -----------------------------
 st.sidebar.header("Parameter Zelle 1")
-Jph1_str = st.sidebar.text_input("Photostromdichte Jph [mA/cm²]", "30")
-J01_str = st.sidebar.text_input("Sättigungsstromdichte J0 [mA/cm²]", "1e-10")
-n1_str = st.sidebar.text_input("Idealfaktor n", "1")
-Rs1_str = st.sidebar.text_input("Serienwiderstand Rs [Ω·cm²]", "0.2")
-Rsh1_str = st.sidebar.text_input("Shunt-Widerstand Rsh [Ω·cm²]", "1000")
-T1_str = st.sidebar.text_input("Temperatur [K]", "298")
+Jph1_str = st.sidebar.text_input("Photostromdichte Jph [mA/cm²] (Z1)", "30")
+J01_str = st.sidebar.text_input("Sättigungsstromdichte J0 [mA/cm²] (Z1)", "1e-10")
+n1_str = st.sidebar.text_input("Idealfaktor n (Z1)", "1")
+Rs1_str = st.sidebar.text_input("Serienwiderstand Rs [Ω·cm²] (Z1)", "0.2")
+Rsh1_str = st.sidebar.text_input("Shunt-Widerstand Rsh [Ω·cm²] (Z1)", "1000")
+T1_str = st.sidebar.text_input("Temperatur [K] (Z1)", "298")
 
 st.sidebar.header("Parameter Zelle 2")
-Jph2_str = st.sidebar.text_input("Photostromdichte Jph [mA/cm²]", "18")
-J02_str = st.sidebar.text_input("Sättigungsstromdichte J0 [mA/cm²]", "1e-12")
-n2_str = st.sidebar.text_input("Idealfaktor n", "1.2")
-Rs2_str = st.sidebar.text_input("Serienwiderstand Rs [Ω·cm²]", "0.3")
-Rsh2_str = st.sidebar.text_input("Shunt-Widerstand Rsh [Ω·cm²]", "1500")
-T2_str = st.sidebar.text_input("Temperatur [K]", "298")
+Jph2_str = st.sidebar.text_input("Photostromdichte Jph [mA/cm²] (Z2)", "18")
+J02_str = st.sidebar.text_input("Sättigungsstromdichte J0 [mA/cm²] (Z2)", "1e-12")
+n2_str = st.sidebar.text_input("Idealfaktor n (Z2)", "1.2")
+Rs2_str = st.sidebar.text_input("Serienwiderstand Rs [Ω·cm²] (Z2)", "0.3")
+Rsh2_str = st.sidebar.text_input("Shunt-Widerstand Rsh [Ω·cm²] (Z2)", "1500")
+T2_str = st.sidebar.text_input("Temperatur [K] (Z2)", "298")
+
 
 def to_float(val, default):
     try:
