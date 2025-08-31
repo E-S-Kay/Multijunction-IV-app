@@ -60,15 +60,22 @@ def calculate_iv(Jph_mA, J0_mA, n, Rs, Rsh, T, J_common):
 
     P_plot = V_vals * J_common
     idx_mpp = int(np.nanargmax(P_plot))
-    
-    Jsc = J_common[0]  # bei V=0
+
+    # Jsc bei V=0 berechnen
+    try:
+        sol = root_scalar(lambda J: diode_equation_V(0.0, J, cell), bracket=[0, Jph*2], method="bisect")
+        Jsc = sol.root * 1000  # zurück zu mA/cm²
+    except Exception:
+        Jsc = Jph_mA  # Fallback
+
     Vmpp = V_vals[idx_mpp]
     Jmpp = J_common[idx_mpp]
     Pmpp = P_plot[idx_mpp]
     FF = Pmpp / (Jsc * Voc) if Voc * Jsc != 0 else 0
-    PCE = Pmpp  # in mW/cm², gleiche Einheit wie P_plot
+    PCE = Pmpp  # in mW/cm²
 
     return V_vals, P_plot, Voc, Vmpp, Jmpp, Pmpp, Jsc, FF, PCE
+
 
 # -----------------------------
 # Streamlit UI
