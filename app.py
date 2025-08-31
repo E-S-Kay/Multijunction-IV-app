@@ -1,6 +1,7 @@
 import numpy as np
 import streamlit as st
 from scipy.optimize import root_scalar, fsolve
+import pandas as pd
 import plotly.graph_objects as go
 
 # -----------------------------
@@ -59,7 +60,15 @@ def calculate_iv(Jph_mA, J0_mA, n, Rs, Rsh, T, J_common):
 
     P_plot = V_vals * J_common
     idx_mpp = int(np.nanargmax(P_plot))
-    return V_vals, P_plot, Voc, V_vals[idx_mpp], J_common[idx_mpp], P_plot[idx_mpp]
+    
+    Jsc = J_common[0]  # bei V=0
+    Vmpp = V_vals[idx_mpp]
+    Jmpp = J_common[idx_mpp]
+    Pmpp = P_plot[idx_mpp]
+    FF = Pmpp / (Jsc * Voc) if Voc * Jsc != 0 else 0
+    PCE = Pmpp  # in mW/cm², gleiche Einheit wie P_plot
+
+    return V_vals, P_plot, Voc, Vmpp, Jmpp, Pmpp, Jsc, FF, PCE
 
 # -----------------------------
 # Streamlit UI
@@ -95,39 +104,48 @@ T2   = get_input("Zelle 2: Temperatur T [K]", 298.0)
 # -----------------------------
 # Berechnung Tandem
 # -----------------------------
-# gemeinsamer Strom bis min(Jph1, Jph2)
-J_common = np.linspace(0, min(Jph1, Jph2), 400)
+# gemeinsamer Strom bis max(Jph1, Jph2)
+J_common = np.linspace(0, max(Jph1, Jph2), 400)
 
 # Teilzellen-Spannungen bei gleichem J
-V1, P1, Voc1, V1_mpp, J1_mpp, P1_mpp = calculate_iv(Jph1, J01, n1, Rs1, Rsh1, T1, J_common)
-V2, P2, Voc2, V2_mpp, J2_mpp, P2_mpp = calculate_iv(Jph2, J02, n2, Rs2, Rsh2, T2, J_common)
+V1, P1, Voc1, V1_mpp, J1_mpp, P1_mpp, Jsc1, FF1, PCE1 = calculate_iv(Jph1, J01, n1, Rs1, Rsh1, T1, J_common)
+V2, P2, Voc2, V2_mpp, J2_mpp, P2_mpp, Jsc2, FF2, PCE2 = calculate_iv(Jph2, J02, n2, Rs2, Rsh2, T2, J_common)
 
 # Tandem-Kombination
 V_tandem = V1 + V2
 P_tandem = V_tandem * J_common
-
 idx_mpp_t = int(np.nanargmax(P_tandem))
 Voc_tandem = V_tandem[0]  # bei J=0
-V_mpp = V_tandem[idx_mpp_t]
-J_mpp = J_common[idx_mpp_t]
-P_mpp = P_tandem[idx_mpp_t]
+V_mpp_t = V_tandem[idx_mpp_t]
+J_mpp_t = J_common[idx_mpp_t]
+P_mpp_t = P_tandem[idx_mpp_t]
+FF_t = P_mpp_t / (max(Jph1, Jph2) * Voc_tandem) if Voc_tandem * max(Jph1, Jph2) != 0 else 0
+PCE_t = P_mpp_t
 
 # -----------------------------
-# Ergebnisse anzeigen
+# Tabelle anzeigen
 # -----------------------------
-st.write(f"**Voc Zelle 1** = {Voc1:.4f} V, **Voc Zelle 2** = {Voc2:.4f} V")
-st.write(f"**Voc Tandem** = {Voc_tandem:.4f} V")
-st.write(f"**Tandem MPP**: V = {V_mpp:.4f} V, J = {J_mpp:.4f} mA/cm², P = {P_mpp:.4f} mW/cm²")
+data = {
+    "Zelle": ["Zelle 1", "Zelle 2", "Tandem"],
+    "Jsc [mA/cm²]": [Jsc1, Jsc2, max(Jph1, Jph2)],
+    "Voc [V]": [Voc1, Voc2, Voc_tandem],
+    "FF": [FF1, FF2, FF_t],
+    "PCE [mW/cm²]": [PCE1, PCE2, PCE_t],
+    "Jmpp [mA/cm²]": [J1_mpp, J2_mpp, J_mpp_t],
+    "Vmpp [V]": [V1_mpp, V2_mpp, V_mpp_t]
+}
+
+df = pd.DataFrame(data)
+st.write("### Photovoltaik-Parameter", df)
 
 # -----------------------------
-# Interaktive Plots (Plotly)
+# Interaktive IV-Kurven Plot
 # -----------------------------
-# IV-Kurven
 fig1 = go.Figure()
 fig1.add_trace(go.Scatter(x=V1, y=J_common, mode="lines", name="Zelle 1"))
 fig1.add_trace(go.Scatter(x=V2, y=J_common, mode="lines", name="Zelle 2"))
 fig1.add_trace(go.Scatter(x=V_tandem, y=J_common, mode="lines", name="Tandem", line=dict(width=3)))
-fig1.add_trace(go.Scatter(x=[V_mpp], y=[J_mpp], mode="markers", name="Tandem MPP",
+fig1.add_trace(go.Scatter(x=[V_mpp_t], y=[J_mpp_t], mode="markers", name="Tandem MPP",
                           marker=dict(color="red", size=10, symbol="x")))
 fig1.update_layout(
     title="IV-Kennlinien",
@@ -137,17 +155,3 @@ fig1.update_layout(
     hovermode="x unified"
 )
 st.plotly_chart(fig1, use_container_width=True)
-
-# P-V Kurve Tandem
-fig2 = go.Figure()
-fig2.add_trace(go.Scatter(x=V_tandem, y=P_tandem, mode="lines", name="Tandem P-V"))
-fig2.add_trace(go.Scatter(x=[V_mpp], y=[P_mpp], mode="markers", name="MPP",
-                          marker=dict(color="red", size=10, symbol="x")))
-fig2.update_layout(
-    title="P-V-Kurve Tandem",
-    xaxis_title="Spannung [V]",
-    yaxis_title="Leistung [mW/cm²]",
-    xaxis=dict(range=[-0.2, Voc_tandem + 0.1]),
-    hovermode="x unified"
-)
-st.plotly_chart(fig2, use_container_width=True)
