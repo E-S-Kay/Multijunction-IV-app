@@ -130,7 +130,13 @@ st.plotly_chart(fig1, use_container_width=True)
 # ---------------------------------
 # Tabelle der Kenngrößen
 # ---------------------------------
-def calculate_params(Jsc, Voc, V_mpp, J_mpp, P_mpp):
+def calculate_params(V, J, Voc, V_mpp, J_mpp):
+    # Jsc = Strom bei V≈0
+    try:
+        Jsc = np.interp(0, V, J)  # lineare Interpolation um V=0
+    except Exception:
+        Jsc = np.nan
+
     FF = (V_mpp * J_mpp) / (Voc * Jsc) if Voc > 0 and Jsc > 0 else np.nan
     Pin = 100.0  # mW/cm²
     PCE = (V_mpp * J_mpp) / Pin * 100  # %
@@ -138,9 +144,9 @@ def calculate_params(Jsc, Voc, V_mpp, J_mpp, P_mpp):
             "Vmpp [V]": V_mpp, "Jmpp [mA/cm²]": J_mpp,
             "FF": FF, "PCE [%]": PCE}
 
-params1 = calculate_params(max(J_common), Voc1, V1_mpp, J1_mpp, P1_mpp)
-params2 = calculate_params(max(J_common), Voc2, V2_mpp, J2_mpp, P2_mpp)
-paramsT = calculate_params(max(J_common), Voc_tandem, V_mpp, J_mpp, P_mpp)
+params1 = calculate_params(V1, J_common, Voc1, V1_mpp, J1_mpp)
+params2 = calculate_params(V2, J_common, Voc2, V2_mpp, J2_mpp)
+paramsT = calculate_params(V_tandem, J_common, Voc_tandem, V_mpp, J_mpp)
 
 df = pd.DataFrame([params1, params2, paramsT],
                   index=["Zelle 1", "Zelle 2", "Tandem"])
