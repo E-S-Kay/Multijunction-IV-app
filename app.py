@@ -151,19 +151,19 @@ rows.append({
     "Jmpp": J_mpp_stack, "Vmpp": V_mpp_stack
 })
 
-def fmt(x):
+def fmt(x, dec=2):
     if x is None or (isinstance(x, float) and np.isnan(x)):
         return "NaN"
-    return f"{x:.2f}"
+    return f"{x:.{dec}f}"
 
 df = pd.DataFrame({
     "Zelle": [r["Zelle"] for r in rows],
-    "Jsc [mA/cm²]": [fmt(r["Jsc"]) for r in rows],
-    "Voc [V]": [fmt(r["Voc"]) for r in rows],
-    "FF [%]": [fmt(r["FF"] * 100.0) if (r["FF"] is not None and not np.isnan(r["FF"])) else "NaN" for r in rows],
-    "PCE [%]": [fmt(r["PCE"]) for r in rows],
-    "Jmpp [mA/cm²]": [fmt(r["Jmpp"]) for r in rows],
-    "Vmpp [V]": [fmt(r["Vmpp"]) for r in rows],
+    "Jsc [mA/cm²]": [fmt(r["Jsc"], 2) for r in rows],
+    "Voc [V]": [fmt(r["Voc"], 3) for r in rows],
+    "FF [%]": [fmt(r["FF"]*100.0, 2) if (r["FF"] is not None and not np.isnan(r["FF"])) else "NaN" for r in rows],
+    "PCE [%]": [fmt(r["PCE"], 2) for r in rows],
+    "Jmpp [mA/cm²]": [fmt(r["Jmpp"], 2) for r in rows],
+    "Vmpp [V]": [fmt(r["Vmpp"], 3) for r in rows],
 })
 
 st.write("### Ergebnisse")
@@ -179,12 +179,9 @@ fig.add_trace(go.Scatter(x=V_stack, y=J_common, mode="lines", name="Stack", line
 fig.add_trace(go.Scatter(x=[V_mpp_stack], y=[J_mpp_stack], mode="markers", name="Stack MPP",
                          marker=dict(color="red", size=10, symbol="x")))
 
-# Vertikale Linie bei x=0
+# Linien bei x=0 und y=0
 fig.add_vline(x=0, line=dict(color="gray", dash="dash"))
-
-# Horizontale Linie bei y=0
 fig.add_hline(y=0, line=dict(color="gray", dash="dash"))
-
 
 fig.update_layout(
     title="IV-Kennlinien",
