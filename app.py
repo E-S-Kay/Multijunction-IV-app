@@ -6,7 +6,7 @@ import plotly.graph_objects as go
 import pandas as pd
 
 # -----------------------------
-# Hilfsfunktionen
+# Helper functions
 # -----------------------------
 def safe_exp(x):
     return np.exp(np.clip(x, -700, 700))
@@ -112,32 +112,38 @@ def fmt(x, dec=2):
 # -----------------------------
 # Streamlit UI
 # -----------------------------
-st.title("IV-Kennlinie: flexibel für 1–4 Teilzellen (Eindiodenmodell)")
+st.title("IV Curves: 1–4 Subcells (Single-Diode Model)")
 
-num_cells = st.sidebar.selectbox("Anzahl der Teilzellen", [1, 2, 3, 4], index=1)
+# --- Description ---
+st.markdown("""
+This app simulates solar cell IV characteristics using the **single-diode model** with series and shunt resistances.  
+For multijunction solar cells, the subcell voltages are **added** to form the overall IV curve.
+""")
 
-# Farben definieren
-pastel_colors = ["#AFCBFF", "#FFCBAF", "#CBAFFF", "#AFFFCB"]  # Pastellfarben für Subzellen
+num_cells = st.sidebar.selectbox("Number of subcells", [1, 2, 3, 4], index=1)
+
+# Define colors
+pastel_colors = ["#AFCBFF", "#FFCBAF", "#CBAFFF", "#AFFFCB"]  # Pastel colors for subcells
 stack_color = "black"
 
 cells = []
 for i in range(num_cells):
     with st.sidebar.container():
-        # Hintergrund-Rechteck
+        # Background rectangle
         st.markdown(
             f"""
             <div style="background-color:{pastel_colors[i]};padding:10px;border-radius:8px;margin-bottom:10px">
-            <strong>Zelle {i+1}</strong><br>
+            <strong>Subcell {i+1}</strong><br>
             </div>
             """, unsafe_allow_html=True
         )
-        # Eingabeparameter (liegen "über" dem Rechteck)
-        Jph = to_float(st.text_input(f"Zelle {i+1}: Jph [mA/cm²]", value="30.0" if i == 0 else "20.0", key=f"Jph{i}"))
-        J0 = to_float(st.text_input(f"Zelle {i+1}: J0 [mA/cm²]", value="1e-10" if i == 0 else "1e-12", key=f"J0{i}"))
-        n = to_float(st.text_input(f"Zelle {i+1}: Idealfaktor n", value="1.0", key=f"n{i}"))
-        Rs = to_float(st.text_input(f"Zelle {i+1}: Rs [Ohm·cm²]", value="0.2", key=f"Rs{i}"))
-        Rsh = to_float(st.text_input(f"Zelle {i+1}: Rsh [Ohm·cm²]", value="1000.0", key=f"Rsh{i}"))
-        T = to_float(st.text_input(f"Zelle {i+1}: Temperatur T [K]", value="298.0", key=f"T{i}"))
+        # Input parameters
+        Jph = to_float(st.text_input(f"Subcell {i+1}: Jph [mA/cm²]", value="30.0" if i == 0 else "20.0", key=f"Jph{i}"))
+        J0 = to_float(st.text_input(f"Subcell {i+1}: J0 [mA/cm²]", value="1e-10" if i == 0 else "1e-12", key=f"J0{i}"))
+        n = to_float(st.text_input(f"Subcell {i+1}: Ideality factor n", value="1.0", key=f"n{i}"))
+        Rs = to_float(st.text_input(f"Subcell {i+1}: Rs [Ω·cm²]", value="0.2", key=f"Rs{i}"))
+        Rsh = to_float(st.text_input(f"Subcell {i+1}: Rsh [Ω·cm²]", value="1000.0", key=f"Rsh{i}"))
+        T = to_float(st.text_input(f"Subcell {i+1}: Temperature T [K]", value="298.0", key=f"T{i}"))
     cells.append({"Jph": Jph, "J0": J0, "n": n, "Rs": Rs, "Rsh": Rsh, "T": T})
 
 J_common = np.linspace(0.0, max([c["Jph"] for c in cells]), 800)
@@ -151,10 +157,11 @@ for i, c in enumerate(cells):
     rows.append({
         "Jsc": Jsc, "Voc": Voc, "FF": FF,
         "PCE": Pmpp, "Jmpp": Jmpp, "Vmpp": Vmpp,
-        "color": pastel_colors[i]
+        "color": pastel_colors[i],
+        "Label": f"Subcell {i+1}"
     })
 
-# Stack nur berechnen, wenn mehr als eine Zelle
+# Multijunction only if >1 cell
 if num_cells > 1:
     V_stack = np.sum(np.vstack(V_all), axis=0)
     P_stack = V_stack * J_common
@@ -170,13 +177,15 @@ if num_cells > 1:
         "Jsc": Jsc_stack, "Voc": Voc_stack,
         "FF": FF_stack, "PCE": P_mpp_stack,
         "Jmpp": J_mpp_stack, "Vmpp": V_mpp_stack,
-        "color": "transparent"  # Stack transparent in Tabelle
+        "color": "transparent",
+        "Label": "Multijunction"
     })
 
 # -----------------------------
-# Ergebnisse-Tabelle
+# Results table
 # -----------------------------
 df = pd.DataFrame({
+    "Cell": [r["Label"] for r in rows],
     "Jsc [mA/cm²]": [fmt(r["Jsc"], 2) for r in rows],
     "Voc [V]": [fmt(r["Voc"], 3) for r in rows],
     "FF [%]": [fmt(r["FF"]*100.0, 2) if (r["FF"] is not None and not np.isnan(r["FF"])) else "NaN" for r in rows],
@@ -193,30 +202,30 @@ def highlight_rows(row):
     color = row_colors[row.name]
     return ['background-color: {}'.format(color)]*len(row)
 
-st.write("### Ergebnisse")
-st.dataframe(df_display.style.apply(highlight_rows, axis=1))
+st.write("### Results")
+st.dataframe(df_display.style.apply(highlight_rows, axis=1).hide(axis="index"))
 
 # -----------------------------
 # Plot
 # -----------------------------
 fig = go.Figure()
 for i, V in enumerate(V_all):
-    fig.add_trace(go.Scatter(x=V, y=J_common, mode="lines", name=f"Zelle {i+1}",
+    fig.add_trace(go.Scatter(x=V, y=J_common, mode="lines", name=f"Subcell {i+1}",
                              line=dict(color=pastel_colors[i], width=2)))
 
 if num_cells > 1:
-    fig.add_trace(go.Scatter(x=V_stack, y=J_common, mode="lines", name="Stack",
+    fig.add_trace(go.Scatter(x=V_stack, y=J_common, mode="lines", name="Multijunction",
                              line=dict(color=stack_color, width=4)))
-    fig.add_trace(go.Scatter(x=[V_mpp_stack], y=[J_mpp_stack], mode="markers", name="Stack MPP",
+    fig.add_trace(go.Scatter(x=[V_mpp_stack], y=[J_mpp_stack], mode="markers", name="Multijunction MPP",
                              marker=dict(color=stack_color, size=10, symbol="x")))
 
 fig.add_vline(x=0, line=dict(color="gray", dash="dash"))
 fig.add_hline(y=0, line=dict(color="gray", dash="dash"))
 
 fig.update_layout(
-    title="IV-Kennlinien",
-    xaxis_title="Spannung [V]",
-    yaxis_title="Stromdichte [mA/cm²]",
+    title="IV Curves",
+    xaxis_title="Voltage [V]",
+    yaxis_title="Current density [mA/cm²]",
     hovermode="x unified"
 )
 
