@@ -135,7 +135,6 @@ for i, c in enumerate(cells):
     V_all.append(V); P_all.append(P)
     FF = calc_FF(Jsc, Voc, Jmpp, Vmpp)
     rows.append({
-        "Zelle": f"Zelle {i+1}",
         "Jsc": Jsc, "Voc": Voc, "FF": FF,
         "PCE": Pmpp, "Jmpp": Jmpp, "Vmpp": Vmpp
     })
@@ -153,7 +152,7 @@ if num_cells > 1:
     FF_stack = calc_FF(Jsc_stack, Voc_stack, J_mpp_stack, V_mpp_stack)
 
     rows.append({
-        "Zelle": "Stack", "Jsc": Jsc_stack, "Voc": Voc_stack,
+        "Jsc": Jsc_stack, "Voc": Voc_stack,
         "FF": FF_stack, "PCE": P_mpp_stack,
         "Jmpp": J_mpp_stack, "Vmpp": V_mpp_stack
     })
@@ -162,7 +161,6 @@ if num_cells > 1:
 # Ergebnisse-Tabelle
 # -----------------------------
 df = pd.DataFrame({
-    "Zelle": [r["Zelle"] for r in rows],
     "Jsc [mA/cm²]": [fmt(r["Jsc"], 2) for r in rows],
     "Voc [V]": [fmt(r["Voc"], 3) for r in rows],
     "FF [%]": [fmt(r["FF"]*100.0, 2) if (r["FF"] is not None and not np.isnan(r["FF"])) else "NaN" for r in rows],
@@ -198,13 +196,12 @@ fig.update_layout(
     hovermode="x unified"
 )
 
-# X-Achse nur bei Stack anpassen, ansonsten maximale Spannung der einzelnen Zelle
+# X-Achse anpassen: bei einer Zelle bis Voc + 0.1, sonst Stack
 if num_cells > 1:
     x_max = Voc_stack + 0.1
 else:
-    x_max = rows[0]["Voc"] + 0.1  # Voc der einzelnen Zelle
+    x_max = rows[0]["Voc"] + 0.1
 
 fig.update_xaxes(range=[-0.2, x_max])
-
 
 st.plotly_chart(fig, use_container_width=True)
