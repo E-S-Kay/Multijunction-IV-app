@@ -122,19 +122,22 @@ stack_color = "black"
 
 cells = []
 for i in range(num_cells):
-    # Sidebar Container einfärben: gesamtes Feld
     with st.sidebar.container():
+        # Hintergrund-Rechteck
         st.markdown(
-            f"<div style='background-color:{pastel_colors[i]};padding:10px;border-radius:5px'>", 
-            unsafe_allow_html=True
+            f"""
+            <div style="background-color:{pastel_colors[i]};padding:10px;border-radius:8px;margin-bottom:10px">
+            <strong>Zelle {i+1}</strong><br>
+            </div>
+            """, unsafe_allow_html=True
         )
+        # Eingabeparameter (liegen "über" dem Rechteck)
         Jph = to_float(st.text_input(f"Zelle {i+1}: Jph [mA/cm²]", value="30.0" if i == 0 else "20.0", key=f"Jph{i}"))
         J0 = to_float(st.text_input(f"Zelle {i+1}: J0 [mA/cm²]", value="1e-10" if i == 0 else "1e-12", key=f"J0{i}"))
         n = to_float(st.text_input(f"Zelle {i+1}: Idealfaktor n", value="1.0", key=f"n{i}"))
         Rs = to_float(st.text_input(f"Zelle {i+1}: Rs [Ohm·cm²]", value="0.2", key=f"Rs{i}"))
         Rsh = to_float(st.text_input(f"Zelle {i+1}: Rsh [Ohm·cm²]", value="1000.0", key=f"Rsh{i}"))
         T = to_float(st.text_input(f"Zelle {i+1}: Temperatur T [K]", value="298.0", key=f"T{i}"))
-        st.markdown("</div>", unsafe_allow_html=True)
     cells.append({"Jph": Jph, "J0": J0, "n": n, "Rs": Rs, "Rsh": Rsh, "T": T})
 
 J_common = np.linspace(0.0, max([c["Jph"] for c in cells]), 800)
