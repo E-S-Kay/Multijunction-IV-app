@@ -169,11 +169,30 @@ df = pd.DataFrame({
 st.write("### Ergebnisse")
 st.table(df)
 
+# -----------------------------
+# Plot
+# -----------------------------
 fig = go.Figure()
 for i, V in enumerate(V_all):
     fig.add_trace(go.Scatter(x=V, y=J_common, mode="lines", name=f"Zelle {i+1}"))
 fig.add_trace(go.Scatter(x=V_stack, y=J_common, mode="lines", name="Stack", line=dict(width=3)))
 fig.add_trace(go.Scatter(x=[V_mpp_stack], y=[J_mpp_stack], mode="markers", name="Stack MPP",
                          marker=dict(color="red", size=10, symbol="x")))
-fig.update_layout(title="IV-Kennlinien", xaxis_title="Spannung [V]", yaxis_title="Stromdichte [mA/cm²]", hovermode="x unified")
+
+# Linien bei x=0 und y=0
+fig.add_shape(type="line", x0=0, x1=0, y0=min(J_common), y1=max(J_common),
+              line=dict(color="gray", dash="dash"))
+fig.add_shape(type="line", x0=min(V_stack), x1=max(V_stack), y0=0, y1=0,
+              line=dict(color="gray", dash="dash"))
+
+fig.update_layout(
+    title="IV-Kennlinien",
+    xaxis_title="Spannung [V]",
+    yaxis_title="Stromdichte [mA/cm²]",
+    hovermode="x unified"
+)
+
+# X-Achse von -0.2 bis VOC_stack + 0.1
+fig.update_xaxes(range=[-0.2, Voc_stack + 0.1])
+
 st.plotly_chart(fig, use_container_width=True)
