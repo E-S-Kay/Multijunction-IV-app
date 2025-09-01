@@ -182,12 +182,16 @@ df = pd.DataFrame({
     "color": [r["color"] for r in rows]
 })
 
-# Tabelle anzeigen mit Zeilenfarben
 df_display = df.drop(columns=['color'])
 row_colors = df['color'].tolist()
 
+# Zeilenfarben zuweisen
+def highlight_rows(row):
+    color = row_colors[row.name]
+    return ['background-color: {}'.format(color)]*len(row)
+
 st.write("### Ergebnisse")
-st.dataframe(df_display.style.apply(lambda x: ['background-color: {}'.format(row_colors[i]) for i in range(len(x))], axis=1))
+st.dataframe(df_display.style.apply(highlight_rows, axis=1))
 
 # -----------------------------
 # Plot
