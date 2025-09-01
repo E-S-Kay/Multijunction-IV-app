@@ -71,14 +71,19 @@ def calculate_iv(Jph_mA, J0_mA, n, Rs, Rsh, T, J_common):
 
     return V_vals, P_plot, Voc, V_vals[idx_mpp], J_common[idx_mpp], P_plot[idx_mpp], Jsc_val
 
-def interpolate_Jsc_tandem(V_tandem, J_common):
-    for i in range(1, len(V_tandem)):
-        if V_tandem[i-1] < 0 and V_tandem[i] > 0:
-            V_pair = np.array([V_tandem[i-1], V_tandem[i]])
-            J_pair = np.array([J_common[i-1], J_common[i]])
-            slope, intercept, _, _, _ = stats.linregress(V_pair, J_pair)
-            return intercept
-    return np.nan
+def interpolate_Jsc_two_points(V, J):
+    # Finde Index, wo das Vorzeichen wechselt
+    sign_changes = np.where(np.diff(np.sign(V)) != 0)[0]
+    if len(sign_changes) == 0:
+        return np.nan  # kein Schnittpunkt gefunden
+    
+    idx = sign_changes[0]  # erster Schnittpunkt
+    V1, V2 = V[idx], V[idx+1]
+    J1, J2 = J[idx], J[idx+1]
+    
+    # Lineare Interpolation: J(V=0) = J1 + (0 - V1) * (J2 - J1) / (V2 - V1)
+    return J1 + (0 - V1) * (J2 - J1) / (V2 - V1)
+
 
 # -----------------------------
 # Streamlit UI
