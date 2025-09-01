@@ -122,18 +122,19 @@ stack_color = "black"
 
 cells = []
 for i in range(num_cells):
-    # Sidebar Container einfärben
-    container = st.sidebar.container()
-    container.markdown(
-        f"<div style='background-color:{pastel_colors[i]};padding:10px;border-radius:5px'>", unsafe_allow_html=True
-    )
-    Jph = to_float(container.text_input(f"Zelle {i+1}: Jph [mA/cm²]", value="30.0" if i == 0 else "20.0", key=f"Jph{i}"))
-    J0 = to_float(container.text_input(f"Zelle {i+1}: J0 [mA/cm²]", value="1e-10" if i == 0 else "1e-12", key=f"J0{i}"))
-    n = to_float(container.text_input(f"Zelle {i+1}: Idealfaktor n", value="1.0", key=f"n{i}"))
-    Rs = to_float(container.text_input(f"Zelle {i+1}: Rs [Ohm·cm²]", value="0.2", key=f"Rs{i}"))
-    Rsh = to_float(container.text_input(f"Zelle {i+1}: Rsh [Ohm·cm²]", value="1000.0", key=f"Rsh{i}"))
-    T = to_float(container.text_input(f"Zelle {i+1}: Temperatur T [K]", value="298.0", key=f"T{i}"))
-    container.markdown("</div>", unsafe_allow_html=True)
+    # Sidebar Container einfärben: gesamtes Feld
+    with st.sidebar.container():
+        st.markdown(
+            f"<div style='background-color:{pastel_colors[i]};padding:10px;border-radius:5px'>", 
+            unsafe_allow_html=True
+        )
+        Jph = to_float(st.text_input(f"Zelle {i+1}: Jph [mA/cm²]", value="30.0" if i == 0 else "20.0", key=f"Jph{i}"))
+        J0 = to_float(st.text_input(f"Zelle {i+1}: J0 [mA/cm²]", value="1e-10" if i == 0 else "1e-12", key=f"J0{i}"))
+        n = to_float(st.text_input(f"Zelle {i+1}: Idealfaktor n", value="1.0", key=f"n{i}"))
+        Rs = to_float(st.text_input(f"Zelle {i+1}: Rs [Ohm·cm²]", value="0.2", key=f"Rs{i}"))
+        Rsh = to_float(st.text_input(f"Zelle {i+1}: Rsh [Ohm·cm²]", value="1000.0", key=f"Rsh{i}"))
+        T = to_float(st.text_input(f"Zelle {i+1}: Temperatur T [K]", value="298.0", key=f"T{i}"))
+        st.markdown("</div>", unsafe_allow_html=True)
     cells.append({"Jph": Jph, "J0": J0, "n": n, "Rs": Rs, "Rsh": Rsh, "T": T})
 
 J_common = np.linspace(0.0, max([c["Jph"] for c in cells]), 800)
@@ -166,7 +167,7 @@ if num_cells > 1:
         "Jsc": Jsc_stack, "Voc": Voc_stack,
         "FF": FF_stack, "PCE": P_mpp_stack,
         "Jmpp": J_mpp_stack, "Vmpp": V_mpp_stack,
-        "color": stack_color
+        "color": "transparent"  # Stack transparent in Tabelle
     })
 
 # -----------------------------
@@ -185,7 +186,6 @@ df = pd.DataFrame({
 df_display = df.drop(columns=['color'])
 row_colors = df['color'].tolist()
 
-# Zeilenfarben zuweisen
 def highlight_rows(row):
     color = row_colors[row.name]
     return ['background-color: {}'.format(color)]*len(row)
@@ -201,14 +201,12 @@ for i, V in enumerate(V_all):
     fig.add_trace(go.Scatter(x=V, y=J_common, mode="lines", name=f"Zelle {i+1}",
                              line=dict(color=pastel_colors[i], width=2)))
 
-# Stack nur plotten, wenn mehr als eine Zelle
 if num_cells > 1:
     fig.add_trace(go.Scatter(x=V_stack, y=J_common, mode="lines", name="Stack",
                              line=dict(color=stack_color, width=4)))
     fig.add_trace(go.Scatter(x=[V_mpp_stack], y=[J_mpp_stack], mode="markers", name="Stack MPP",
                              marker=dict(color=stack_color, size=10, symbol="x")))
 
-# Linien bei x=0 und y=0
 fig.add_vline(x=0, line=dict(color="gray", dash="dash"))
 fig.add_hline(y=0, line=dict(color="gray", dash="dash"))
 
@@ -219,12 +217,7 @@ fig.update_layout(
     hovermode="x unified"
 )
 
-# X-Achse anpassen
-if num_cells > 1:
-    x_max = Voc_stack + 0.1
-else:
-    x_max = rows[0]["Voc"] + 0.1
-
+x_max = Voc_stack + 0.1 if num_cells > 1 else rows[0]["Voc"] + 0.1
 fig.update_xaxes(range=[-0.2, x_max])
 
 st.plotly_chart(fig, use_container_width=True)
