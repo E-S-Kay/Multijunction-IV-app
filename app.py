@@ -69,18 +69,23 @@ def calculate_iv(Jph_mA, J0_mA, n, Rs, Rsh, T, J_common):
 
     return V_vals, P_plot, Voc, V_vals[idx_mpp], J_common[idx_mpp], P_plot[idx_mpp], Jsc
 
-def interpolate_Jsc(V, J):
-    idx = np.where(V >= 0)[0]
-    if len(idx) == 0 or idx[0] == 0:
-        return J[0]
-    i1 = idx[0] - 1
-    i2 = idx[0]
-    return J[i1] + (J[i2] - J[i1]) * (-V[i1]) / (V[i2] - V[i1])
+from scipy import stats
 
-def calc_FF(Jsc, Voc, Jmpp, Vmpp):
-    if Jsc == 0 or Voc == 0:
-        return 0
-    return (Jmpp * Vmpp) / (Jsc * Voc)
+def interpolate_Jsc_two_points(V, J):
+    # Stelle sicher, dass es ein Vorzeichenwechsel gibt
+    if np.all(V > 0) or np.all(V < 0):
+        return np.nan
+    
+    # Index vom ersten positiven Wert
+    idx_pos = np.argmax(V > 0)
+    idx_neg = idx_pos - 1
+    
+    V_pair = np.array([V[idx_neg], V[idx_pos]])
+    J_pair = np.array([J[idx_neg], J[idx_pos]])
+    
+    slope, intercept, _, _, _ = stats.linregress(V_pair, J_pair)
+    return intercept  # Strom bei V=0
+
 
 # -----------------------------
 # Streamlit UI
@@ -132,7 +137,7 @@ J_mpp = J_common[idx_mpp_t]
 P_mpp = P_tandem[idx_mpp_t]
 
 # Tandem Jsc über Interpolation
-Jsc_tandem = interpolate_Jsc(V_tandem, J_common)
+Jsc_tandem = interpolate_Jsc_two_points(V_tandem, J_common)
 
 # -----------------------------
 # Ergebnisse als Tabelle
