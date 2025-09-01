@@ -9,9 +9,11 @@ import pandas as pd
 # Helper functions
 # -----------------------------
 def safe_exp(x):
+    # Avoid overflow of exp() for large arguments
     return np.exp(np.clip(x, -700, 700))
 
 def diode_equation_V(V, J, cell):
+    # Single-diode equation with series and shunt resistances
     q = 1.602176634e-19
     k = 1.380649e-23
     arg = q * (V + J * cell["Rs"]) / (cell["n"] * k * cell["T"])
@@ -19,6 +21,7 @@ def diode_equation_V(V, J, cell):
     return J - (cell["Jph"] - cell["J0"] * (exp_term - 1.0) - (V + J * cell["Rs"]) / cell["Rsh"])
 
 def estimate_Voc(cell):
+    # Open-circuit voltage at J = 0 (solve for V)
     try:
         sol = root_scalar(lambda V: diode_equation_V(V, 0.0, cell),
                           bracket=[-0.5, 2.0], method="bisect")
@@ -26,9 +29,11 @@ def estimate_Voc(cell):
             return sol.root
     except Exception:
         pass
+    # Robust fallback
     return 0.6
 
 def calculate_iv(Jph_mA, J0_mA, n, Rs, Rsh, T, J_common):
+    # Compute V(J) and power for a single subcell along the common current axis
     Jph = float(Jph_mA) / 1000.0
     J0  = float(J0_mA) / 1000.0
     cell = {"Jph": Jph, "J0": J0, "n": float(n), "Rs": float(Rs), "Rsh": float(Rsh), "T": float(T)}
@@ -59,6 +64,7 @@ def calculate_iv(Jph_mA, J0_mA, n, Rs, Rsh, T, J_common):
     P_plot = V_vals * J_common
     idx_mpp = int(np.nanargmax(P_plot))
 
+    # Short-circuit current density at V=0 (solve for J)
     try:
         upper = max(1e-6, Jph_mA * 1.5)
         sol_j = root_scalar(lambda J: diode_equation_V(0.0, J/1000.0, cell),
@@ -74,6 +80,7 @@ def calculate_iv(Jph_mA, J0_mA, n, Rs, Rsh, T, J_common):
     return V_vals, P_plot, float(Voc), Vmpp, Jmpp, Pmpp, Jsc_val
 
 def interpolate_Jsc_two_points_linreg(V, J):
+    # Estimate J(V=0) by linear interpolation across the sign change
     V = np.asarray(V, dtype=float)
     J = np.asarray(J, dtype=float)
     if V.size < 2:
@@ -91,6 +98,7 @@ def interpolate_Jsc_two_points_linreg(V, J):
     return float(intercept)
 
 def calc_FF(Jsc, Voc, Jmpp, Vmpp):
+    # Fill factor = Pmpp / (Jsc * Voc)
     try:
         if np.isnan(Jsc) or Jsc == 0 or Voc == 0:
             return np.nan
@@ -99,12 +107,14 @@ def calc_FF(Jsc, Voc, Jmpp, Vmpp):
         return np.nan
 
 def to_float(text, default=0.0):
+    # Robust float parsing with comma/point handling
     try:
         return float(text.strip().replace(",", "."))
     except Exception:
         return float(default)
 
 def fmt(x, dec=2):
+    # Safe number formatting with fixed decimals
     if x is None or (isinstance(x, float) and np.isnan(x)):
         return "NaN"
     return f"{x:.{dec}f}"
@@ -112,32 +122,37 @@ def fmt(x, dec=2):
 # -----------------------------
 # Streamlit UI
 # -----------------------------
+st.set_page_config(page_title="Multijunction IV Simulator", layout="centered")
+
 st.title("IV Curves: 1–4 Subcells (Single-Diode Model)")
 
-# --- Description ---
+# --- Description (can also be loaded from README.md if you prefer) ---
 st.markdown("""
 This app simulates solar cell IV characteristics using the **single-diode model** with series and shunt resistances.  
-For multijunction solar cells, the subcell voltages are **added** to form the overall IV curve.
+For **multijunction** solar cells, the subcell voltages are **added** to form the overall IV curve (common current density).
 """)
 
+# Sidebar: number of subcells
 num_cells = st.sidebar.selectbox("Number of subcells", [1, 2, 3, 4], index=1)
 
 # Define colors
 pastel_colors = ["#AFCBFF", "#FFCBAF", "#CBAFFF", "#AFFFCB"]  # Pastel colors for subcells
 stack_color = "black"
 
+# Subcell inputs
 cells = []
 for i in range(num_cells):
     with st.sidebar.container():
-        # Background rectangle
+        # Background rectangle behind the input group (visual grouping)
         st.markdown(
             f"""
             <div style="background-color:{pastel_colors[i]};padding:10px;border-radius:8px;margin-bottom:10px">
-            <strong>Subcell {i+1}</strong><br>
+                <strong>Subcell {i+1}</strong>
             </div>
-            """, unsafe_allow_html=True
+            """,
+            unsafe_allow_html=True
         )
-        # Input parameters
+        # Input parameters (standard Streamlit fields)
         Jph = to_float(st.text_input(f"Subcell {i+1}: Jph [mA/cm²]", value="30.0" if i == 0 else "20.0", key=f"Jph{i}"))
         J0 = to_float(st.text_input(f"Subcell {i+1}: J0 [mA/cm²]", value="1e-10" if i == 0 else "1e-12", key=f"J0{i}"))
         n = to_float(st.text_input(f"Subcell {i+1}: Ideality factor n", value="1.0", key=f"n{i}"))
@@ -146,8 +161,10 @@ for i in range(num_cells):
         T = to_float(st.text_input(f"Subcell {i+1}: Temperature T [K]", value="298.0", key=f"T{i}"))
     cells.append({"Jph": Jph, "J0": J0, "n": n, "Rs": Rs, "Rsh": Rsh, "T": T})
 
+# Common current axis (mA/cm²)
 J_common = np.linspace(0.0, max([c["Jph"] for c in cells]), 800)
 
+# Compute per subcell
 V_all, P_all, rows = [], [], []
 for i, c in enumerate(cells):
     V, P, Voc, Vmpp, Jmpp, Pmpp, Jsc = calculate_iv(c["Jph"], c["J0"], c["n"], c["Rs"], c["Rsh"], c["T"], J_common)
@@ -161,7 +178,7 @@ for i, c in enumerate(cells):
         "Label": f"Subcell {i+1}"
     })
 
-# Multijunction only if >1 cell
+# Multijunction (sum of voltages) only if more than one subcell
 if num_cells > 1:
     V_stack = np.sum(np.vstack(V_all), axis=0)
     P_stack = V_stack * J_common
@@ -177,7 +194,7 @@ if num_cells > 1:
         "Jsc": Jsc_stack, "Voc": Voc_stack,
         "FF": FF_stack, "PCE": P_mpp_stack,
         "Jmpp": J_mpp_stack, "Vmpp": V_mpp_stack,
-        "color": "transparent",
+        "color": "transparent",     # Transparent background in the table
         "Label": "Multijunction"
     })
 
@@ -200,25 +217,40 @@ row_colors = df['color'].tolist()
 
 def highlight_rows(row):
     color = row_colors[row.name]
-    return ['background-color: {}'.format(color)]*len(row)
+    return ['background-color: {}'.format(color)] * len(row)
 
 st.write("### Results")
-st.dataframe(df_display.style.apply(highlight_rows, axis=1).hide(axis="index"))
+st.dataframe(
+    df_display.style.apply(highlight_rows, axis=1).hide(axis="index")
+)
 
 # -----------------------------
 # Plot
 # -----------------------------
 fig = go.Figure()
+
+# Subcells (pastel, thin)
 for i, V in enumerate(V_all):
-    fig.add_trace(go.Scatter(x=V, y=J_common, mode="lines", name=f"Subcell {i+1}",
-                             line=dict(color=pastel_colors[i], width=2)))
+    fig.add_trace(go.Scatter(
+        x=V, y=J_common, mode="lines",
+        name=f"Subcell {i+1}",
+        line=dict(color=pastel_colors[i], width=2)
+    ))
 
+# Multijunction (black, thick)
 if num_cells > 1:
-    fig.add_trace(go.Scatter(x=V_stack, y=J_common, mode="lines", name="Multijunction",
-                             line=dict(color=stack_color, width=4)))
-    fig.add_trace(go.Scatter(x=[V_mpp_stack], y=[J_mpp_stack], mode="markers", name="Multijunction MPP",
-                             marker=dict(color=stack_color, size=10, symbol="x")))
+    fig.add_trace(go.Scatter(
+        x=V_stack, y=J_common, mode="lines",
+        name="Multijunction",
+        line=dict(color=stack_color, width=4)
+    ))
+    fig.add_trace(go.Scatter(
+        x=[V_mpp_stack], y=[J_mpp_stack], mode="markers",
+        name="Multijunction MPP",
+        marker=dict(color=stack_color, size=10, symbol="x")
+    ))
 
+# Axes helpers
 fig.add_vline(x=0, line=dict(color="gray", dash="dash"))
 fig.add_hline(y=0, line=dict(color="gray", dash="dash"))
 
@@ -229,12 +261,15 @@ fig.update_layout(
     hovermode="x unified"
 )
 
-x_max = Voc_stack + 0.1 if num_cells > 1 else rows[0]["Voc"] + 0.1
+# X-range: single-junction uses its own Voc, multijunction uses combined Voc
+x_max = (rows[0]["Voc"] + 0.1) if num_cells == 1 else (rows[-1]["Voc"] + 0.1)  # rows[-1] is Multijunction when present
 fig.update_xaxes(range=[-0.2, x_max])
 
 st.plotly_chart(fig, use_container_width=True)
 
-# --- Footer / About Section ---
+# -----------------------------
+# About / Footer
+# -----------------------------
 st.markdown("---")
 st.markdown(
     """
@@ -242,4 +277,3 @@ st.markdown(
     **Contact (bugs, improvements, feedback):** [eike.koehnen@helmholtz-berlin.de](mailto:eike.koehnen@helmholtz-berlin.de)
     """
 )
-
