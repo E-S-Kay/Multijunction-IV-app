@@ -116,15 +116,22 @@ st.title("IV-Kennlinie: flexibel für 1–4 Teilzellen (Eindiodenmodell)")
 
 num_cells = st.sidebar.selectbox("Anzahl der Teilzellen", [1, 2, 3, 4], index=1)
 
+# Farben definieren
+pastel_colors = ["#AFCBFF", "#FFCBAF", "#CBAFFF", "#AFFFCB"]  # Pastellfarben für Subzellen
+stack_color = "black"
+
 cells = []
 for i in range(num_cells):
-    st.sidebar.subheader(f"Zelle {i+1}")
-    Jph = to_float(st.sidebar.text_input(f"Zelle {i+1}: Jph [mA/cm²]", value="30.0" if i == 0 else "20.0"))
-    J0  = to_float(st.sidebar.text_input(f"Zelle {i+1}: J0 [mA/cm²]", value="1e-10" if i == 0 else "1e-12"))
-    n   = to_float(st.sidebar.text_input(f"Zelle {i+1}: Idealfaktor n", value="1.0"))
-    Rs  = to_float(st.sidebar.text_input(f"Zelle {i+1}: Rs [Ohm·cm²]", value="0.2"))
-    Rsh = to_float(st.sidebar.text_input(f"Zelle {i+1}: Rsh [Ohm·cm²]", value="1000.0"))
-    T   = to_float(st.sidebar.text_input(f"Zelle {i+1}: Temperatur T [K]", value="298.0"))
+    # Sidebar Container einfärben
+    container = st.sidebar.container()
+    container.markdown(f"<div style='background-color:{pastel_colors[i]};padding:10px;border-radius:5px'>", unsafe_allow_html=True)
+    Jph = to_float(container.text_input(f"Zelle {i+1}: Jph [mA/cm²]", value="30.0" if i == 0 else "20.0"))
+    J0  = to_float(container.text_input(f"Zelle {i+1}: J0 [mA/cm²]", value="1e-10" if i == 0 else "1e-12"))
+    n   = to_float(container.text_input(f"Zelle {i+1}: Idealfaktor n", value="1.0"))
+    Rs  = to_float(container.text_input(f"Zelle {i+1}: Rs [Ohm·cm²]", value="0.2"))
+    Rsh = to_float(container.text_input(f"Zelle {i+1}: Rsh [Ohm·cm²]", value="1000.0"))
+    T   = to_float(container.text_input(f"Zelle {i+1}: Temperatur T [K]", value="298.0"))
+    container.markdown("</div>", unsafe_allow_html=True)
     cells.append({"Jph": Jph, "J0": J0, "n": n, "Rs": Rs, "Rsh": Rsh, "T": T})
 
 J_common = np.linspace(0.0, max([c["Jph"] for c in cells]), 800)
@@ -132,11 +139,13 @@ J_common = np.linspace(0.0, max([c["Jph"] for c in cells]), 800)
 V_all, P_all, rows = [], [], []
 for i, c in enumerate(cells):
     V, P, Voc, Vmpp, Jmpp, Pmpp, Jsc = calculate_iv(c["Jph"], c["J0"], c["n"], c["Rs"], c["Rsh"], c["T"], J_common)
-    V_all.append(V); P_all.append(P)
+    V_all.append(V)
+    P_all.append(P)
     FF = calc_FF(Jsc, Voc, Jmpp, Vmpp)
     rows.append({
         "Jsc": Jsc, "Voc": Voc, "FF": FF,
-        "PCE": Pmpp, "Jmpp": Jmpp, "Vmpp": Vmpp
+        "PCE": Pmpp, "Jmpp": Jmpp, "Vmpp": Vmpp,
+        "color": pastel_colors[i]
     })
 
 # Stack nur berechnen, wenn mehr als eine Zelle
@@ -154,7 +163,8 @@ if num_cells > 1:
     rows.append({
         "Jsc": Jsc_stack, "Voc": Voc_stack,
         "FF": FF_stack, "PCE": P_mpp_stack,
-        "Jmpp": J_mpp_stack, "Vmpp": V_mpp_stack
+        "Jmpp": J_mpp_stack, "Vmpp": V_mpp_stack,
+        "color": stack_color
     })
 
 # -----------------------------
@@ -169,21 +179,24 @@ df = pd.DataFrame({
     "Vmpp [V]": [fmt(r["Vmpp"], 3) for r in rows],
 })
 
+# Tabelle einfärben entsprechend den Kurven
+row_colors = [r["color"] for r in rows]
 st.write("### Ergebnisse")
-st.table(df)
+st.table(df.style.set_properties(**{'background-color': pd.Series(row_colors)}).hide_index())
 
 # -----------------------------
 # Plot
 # -----------------------------
 fig = go.Figure()
 for i, V in enumerate(V_all):
-    fig.add_trace(go.Scatter(x=V, y=J_common, mode="lines", name=f"Zelle {i+1}"))
+    fig.add_trace(go.Scatter(x=V, y=J_common, mode="lines", name=f"Zelle {i+1}",
+                             line=dict(color=pastel_colors[i], width=2)))
 
 # Stack nur plotten, wenn mehr als eine Zelle
 if num_cells > 1:
-    fig.add_trace(go.Scatter(x=V_stack, y=J_common, mode="lines", name="Stack", line=dict(width=3)))
+    fig.add_trace(go.Scatter(x=V_stack, y=J_common, mode="lines", name="Stack", line=dict(color=stack_color, width=4)))
     fig.add_trace(go.Scatter(x=[V_mpp_stack], y=[J_mpp_stack], mode="markers", name="Stack MPP",
-                             marker=dict(color="red", size=10, symbol="x")))
+                             marker=dict(color=stack_color, size=10, symbol="x")))
 
 # Linien bei x=0 und y=0
 fig.add_vline(x=0, line=dict(color="gray", dash="dash"))
@@ -196,7 +209,7 @@ fig.update_layout(
     hovermode="x unified"
 )
 
-# X-Achse anpassen: bei einer Zelle bis Voc + 0.1, sonst Stack
+# X-Achse anpassen
 if num_cells > 1:
     x_max = Voc_stack + 0.1
 else:
