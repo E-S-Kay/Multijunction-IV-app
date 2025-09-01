@@ -1,14 +1,16 @@
 import numpy as np
 import streamlit as st
 from scipy.optimize import root_scalar, fsolve
-from scipy import stats
 import plotly.graph_objects as go
+import pandas as pd
 
 # -----------------------------
 # Hilfsfunktionen
 # -----------------------------
+
 def safe_exp(x):
     return np.exp(np.clip(x, -700, 700))
+
 
 def diode_equation_V(V, J, cell):
     q = 1.602176634e-19  # C
@@ -16,6 +18,7 @@ def diode_equation_V(V, J, cell):
     arg = q * (V + J * cell["Rs"]) / (cell["n"] * k * cell["T"])
     exp_term = safe_exp(arg)
     return J - (cell["Jph"] - cell["J0"] * (exp_term - 1.0) - (V + J * cell["Rs"]) / cell["Rsh"])
+
 
 def estimate_Voc(cell):
     try:
@@ -27,60 +30,96 @@ def estimate_Voc(cell):
         pass
     return 0.6
 
+
 def calculate_iv(Jph_mA, J0_mA, n, Rs, Rsh, T, J_common):
-    # Umrechnung in A/cm²
+    """Berechnet V(J)-Kurve (V für jedes J in J_common) und gibt MPP sowie Jsc (aus Diodengleichung bei V=0) zurück.
+    J_common ist ein Array in mA/cm².
+    Rückgabe: V_vals, P_plot, Voc, Vmpp, Jmpp, Pmpp, Jsc (alle Ströme in mA/cm², Leistungen in mW/cm²)
+    """
+    # Umrechnung in A/cm² für Berechnungen
     Jph = Jph_mA / 1000.0
     J0  = J0_mA  / 1000.0
 
     cell = {"Jph": Jph, "J0": J0, "n": n, "Rs": Rs, "Rsh": Rsh, "T": T}
     Voc = estimate_Voc(cell)
 
-    V_vals = np.zeros_like(J_common)
+    V_vals = np.zeros_like(J_common, dtype=float)
     V_prev = Voc
 
     for i, JmA in enumerate(J_common):
         J = JmA / 1000.0  # A/cm²
         V_sol = None
+        # versuche robuste Lösung mit root_scalar (bessere Stabilität in monotone Bereiche)
         try:
-            sol = root_scalar(lambda V: diode_equation_V(V, J, cell),
-                              bracket=[-1.0, Voc+1.5], method="bisect")
+            sol = root_scalar(lambda V: diode_equation_V(V, J, cell), bracket=[-1.0, Voc + 1.5], method="bisect")
             if sol.converged:
                 V_sol = sol.root
         except Exception:
             pass
+        # fallback auf fsolve mit vorherigem Wert als Anfangsschätzwert
         if V_sol is None:
-            guess = V_prev
             try:
-                sol = fsolve(lambda V: diode_equation_V(V, J, cell), guess)
-                V_sol = sol[0]
+                sol = fsolve(lambda V: diode_equation_V(V, J, cell), V_prev)
+                V_sol = float(sol[0])
             except Exception:
-                V_sol = guess
+                V_sol = float(V_prev)
         V_vals[i] = V_sol
         V_prev = V_sol
 
+    # P in mW/cm² (V in V, J_common in mA/cm²)
     P_plot = V_vals * J_common
     idx_mpp = int(np.nanargmax(P_plot))
 
-    # Berechne Jsc mit diode_equation bei V=0
+    # Jsc durch explizites Lösen der Diodengleichung bei V=0 (J in A/cm² -> Ergebnis in mA/cm²)
     try:
-        sol = root_scalar(lambda J: diode_equation_V(0.0, J/1000.0, cell),
-                          bracket=[0, Jph_mA+5], method="bisect")
-        Jsc = sol.root
+        sol_j = root_scalar(lambda J: diode_equation_V(0.0, J/1000.0, cell), bracket=[0.0, (Jph_mA * 1.5)], method="bisect")
+        Jsc = float(sol_j.root)
     except Exception:
-        Jsc = Jph_mA
+        # Fallback: letzter erreichbarer Strom im Raster
+        Jsc = float(J_common[-1])
 
-    return V_vals, P_plot, Voc, V_vals[idx_mpp], J_common[idx_mpp], P_plot[idx_mpp], Jsc
+    Vmpp = float(V_vals[idx_mpp])
+    Jmpp = float(J_common[idx_mpp])
+    Pmpp = float(P_plot[idx_mpp])
 
-# Lineare Interpolation (2 Punkte) für Tandem Jsc
+    return V_vals, P_plot, float(Voc), Vmpp, Jmpp, Pmpp, Jsc
+
+
+# 2-Punkte-Interpolation (erstes V>0 und erstes V<=0)
 def interpolate_Jsc_two_points(V, J):
-    if np.all(V > 0) or np.all(V < 0):
-        return np.nan
-    idx_pos = np.argmax(V > 0)
-    idx_neg = idx_pos - 1
-    V_pair = np.array([V[idx_neg], V[idx_pos]])
-    J_pair = np.array([J[idx_neg], J[idx_pos]])
-    slope, intercept, _, _, _ = stats.linregress(V_pair, J_pair)
-    return intercept
+    V = np.asarray(V, dtype=float)
+    J = np.asarray(J, dtype=float)
+
+    # finde erstes Index, wo V <= 0 (erste Stelle, an der die Kurve null oder negativ wird)
+    neg_idxs = np.where(V <= 0.0)[0]
+    if neg_idxs.size == 0:
+        # kein Vorzeichenwechsel gefunden -> fallback: letzter Strom
+        return float(J[-1])
+    idx_neg = int(neg_idxs[0])
+    if idx_neg == 0:
+        # die Kurve ist schon bei erstem Punkt <= 0 -> fallback: erster Stromwert
+        return float(J[0])
+
+    idx_pos = idx_neg - 1
+    V_pair = V[[idx_pos, idx_neg]]
+    J_pair = J[[idx_pos, idx_neg]]
+
+    # Vermeide Division durch Null
+    if np.isclose(V_pair[1], V_pair[0]):
+        return float(J_pair[0])
+
+    # lineare Interpolation: J = m*V + b -> b = J1 - m*V1
+    slope = (J_pair[1] - J_pair[0]) / (V_pair[1] - V_pair[0])
+    intercept = J_pair[0] - slope * V_pair[0]
+    return float(intercept)
+
+
+def calc_FF(Jsc, Voc, Jmpp, Vmpp):
+    # Jsc, Jmpp in mA/cm², Voc, Vmpp in V -> FF dimensionless
+    if Jsc == 0 or Voc == 0:
+        return 0.0
+    return (Jmpp * Vmpp) / (Jsc * Voc)
+
 
 # -----------------------------
 # Streamlit UI
@@ -88,6 +127,7 @@ def interpolate_Jsc_two_points(V, J):
 st.title("IV-Kennlinie einer Tandemsolarzelle (2 Teilzellen, Eindiodenmodell)")
 
 st.sidebar.header("Parameter der ersten Zelle")
+
 def get_input(label, default):
     val_str = st.sidebar.text_input(label, value=str(default))
     try:
@@ -116,60 +156,50 @@ T2   = get_input("Zelle 2: Temperatur T [K]", 298.0)
 # -----------------------------
 # Berechnung Tandem
 # -----------------------------
-J_common = np.linspace(0, max(Jph1, Jph2), 400)
+J_common = np.linspace(0.0, max(Jph1, Jph2), 400)  # in mA/cm²
 
-# Teilzellen-Spannungen bei gleichem J
 V1, P1, Voc1, V1_mpp, J1_mpp, P1_mpp, Jsc1 = calculate_iv(Jph1, J01, n1, Rs1, Rsh1, T1, J_common)
 V2, P2, Voc2, V2_mpp, J2_mpp, P2_mpp, Jsc2 = calculate_iv(Jph2, J02, n2, Rs2, Rsh2, T2, J_common)
 
 # Tandem-Kombination
 V_tandem = V1 + V2
 P_tandem = V_tandem * J_common
-
 idx_mpp_t = int(np.nanargmax(P_tandem))
-Voc_tandem = V_tandem[0]  # bei J=0
-V_mpp = V_tandem[idx_mpp_t]
-J_mpp = J_common[idx_mpp_t]
-P_mpp = P_tandem[idx_mpp_t]
+Voc_tandem = float(V_tandem[0])  # bei J=0 (erste Eintrag)
+V_mpp = float(V_tandem[idx_mpp_t])
+J_mpp = float(J_common[idx_mpp_t])
+P_mpp = float(P_tandem[idx_mpp_t])
 
 # Tandem Jsc mit 2-Punkte-Interpolation
 Jsc_tandem = interpolate_Jsc_two_points(V_tandem, J_common)
 
 # -----------------------------
-# Ergebnisse in Tabelle
+# Ergebnisse als Tabelle
 # -----------------------------
-def calc_FF(Jsc, Voc, Jmpp, Vmpp):
-    if Jsc == 0 or Voc == 0:
-        return 0
-    return (Jmpp * Vmpp) / (Jsc * Voc)
-
-def calc_PCE(Jsc, Voc, FF):
-    return Jsc * Voc * FF / 100.0  # in % (mW/cm² bei 100 mW/cm² Einstrahlung)
-
 FF1 = calc_FF(Jsc1, Voc1, J1_mpp, V1_mpp)
-PCE1 = calc_PCE(Jsc1, Voc1, FF1)
-
 FF2 = calc_FF(Jsc2, Voc2, J2_mpp, V2_mpp)
-PCE2 = calc_PCE(Jsc2, Voc2, FF2)
+FF_tandem = calc_FF(Jsc_tandem, Voc_tandem, J_mpp, V_mpp)
 
-FF_t = calc_FF(Jsc_tandem, Voc_tandem, J_mpp, V_mpp)
-PCE_t = calc_PCE(Jsc_tandem, Voc_tandem, FF_t)
+# Pmpp ist bereits in mW/cm²; bei 100 mW/cm² Einstrahlung entspricht der numerische Wert der Effizienz in Prozent
+PCE1 = P1_mpp
+PCE2 = P2_mpp
+PCE_t = P_mpp
 
-import pandas as pd
 results = pd.DataFrame({
     "Zelle": ["Zelle 1", "Zelle 2", "Tandem"],
     "Jsc [mA/cm²]": [f"{Jsc1:.2f}", f"{Jsc2:.2f}", f"{Jsc_tandem:.2f}"],
     "Voc [V]": [f"{Voc1:.2f}", f"{Voc2:.2f}", f"{Voc_tandem:.2f}"],
-    "FF": [f"{FF1:.2f}", f"{FF2:.2f}", f"{FF_t:.2f}"],
+    "FF": [f"{FF1:.2f}", f"{FF2:.2f}", f"{FF_tandem:.2f}"],
     "PCE [%]": [f"{PCE1:.2f}", f"{PCE2:.2f}", f"{PCE_t:.2f}"],
     "Jmpp [mA/cm²]": [f"{J1_mpp:.2f}", f"{J2_mpp:.2f}", f"{J_mpp:.2f}"],
     "Vmpp [V]": [f"{V1_mpp:.2f}", f"{V2_mpp:.2f}", f"{V_mpp:.2f}"]
 })
 
+st.write("### Ergebnisse")
 st.table(results)
 
 # -----------------------------
-# Interaktive Plots (Plotly)
+# Interaktive IV-Plots
 # -----------------------------
 fig1 = go.Figure()
 fig1.add_trace(go.Scatter(x=V1, y=J_common, mode="lines", name="Zelle 1"))
@@ -184,4 +214,5 @@ fig1.update_layout(
     xaxis=dict(range=[-0.2, Voc_tandem + 0.1]),
     hovermode="x unified"
 )
+
 st.plotly_chart(fig1, use_container_width=True)
