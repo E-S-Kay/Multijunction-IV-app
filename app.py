@@ -116,27 +116,39 @@ st.title("IV-Kennlinie: flexibel für 1–4 Teilzellen (Eindiodenmodell)")
 
 num_cells = st.sidebar.selectbox("Anzahl der Teilzellen", [1, 2, 3, 4], index=1)
 
-# Farben definieren
-pastel_colors = ["#AFCBFF", "#FFCBAF", "#CBAFFF", "#AFFFCB"]  # Pastellfarben für Subzellen
+# Pastellfarben definieren
+pastel_colors = ["#AFCBFF", "#FFCBAF", "#CBAFFF", "#AFFFCB"]
 stack_color = "black"
 
+# -----------------------------
+# CSS für Textfelder: alle Textfelder eingefärbt
+# -----------------------------
+css = ""
+for i, color in enumerate(pastel_colors):
+    css += f"""
+    div[data-baseweb="input"] > input:nth-of-type({i+1}) {{
+        background-color: {color};
+        border-radius: 5px;
+    }}
+    """
+st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
+
+# -----------------------------
+# Eingabeparameter
+# -----------------------------
 cells = []
 for i in range(num_cells):
-    # Sidebar Container einfärben: gesamtes Feld
-    with st.sidebar.container():
-        st.markdown(
-            f"<div style='background-color:{pastel_colors[i]};padding:10px;border-radius:5px'>", 
-            unsafe_allow_html=True
-        )
-        Jph = to_float(st.text_input(f"Zelle {i+1}: Jph [mA/cm²]", value="30.0" if i == 0 else "20.0", key=f"Jph{i}"))
-        J0 = to_float(st.text_input(f"Zelle {i+1}: J0 [mA/cm²]", value="1e-10" if i == 0 else "1e-12", key=f"J0{i}"))
-        n = to_float(st.text_input(f"Zelle {i+1}: Idealfaktor n", value="1.0", key=f"n{i}"))
-        Rs = to_float(st.text_input(f"Zelle {i+1}: Rs [Ohm·cm²]", value="0.2", key=f"Rs{i}"))
-        Rsh = to_float(st.text_input(f"Zelle {i+1}: Rsh [Ohm·cm²]", value="1000.0", key=f"Rsh{i}"))
-        T = to_float(st.text_input(f"Zelle {i+1}: Temperatur T [K]", value="298.0", key=f"T{i}"))
-        st.markdown("</div>", unsafe_allow_html=True)
+    Jph = to_float(st.sidebar.text_input(f"Zelle {i+1}: Jph [mA/cm²]", value="30.0" if i == 0 else "20.0", key=f"Jph{i}"))
+    J0 = to_float(st.sidebar.text_input(f"Zelle {i+1}: J0 [mA/cm²]", value="1e-10" if i == 0 else "1e-12", key=f"J0{i}"))
+    n = to_float(st.sidebar.text_input(f"Zelle {i+1}: Idealfaktor n", value="1.0", key=f"n{i}"))
+    Rs = to_float(st.sidebar.text_input(f"Zelle {i+1}: Rs [Ohm·cm²]", value="0.2", key=f"Rs{i}"))
+    Rsh = to_float(st.sidebar.text_input(f"Zelle {i+1}: Rsh [Ohm·cm²]", value="1000.0", key=f"Rsh{i}"))
+    T = to_float(st.sidebar.text_input(f"Zelle {i+1}: Temperatur T [K]", value="298.0", key=f"T{i}"))
     cells.append({"Jph": Jph, "J0": J0, "n": n, "Rs": Rs, "Rsh": Rsh, "T": T})
 
+# -----------------------------
+# IV-Berechnungen
+# -----------------------------
 J_common = np.linspace(0.0, max([c["Jph"] for c in cells]), 800)
 
 V_all, P_all, rows = [], [], []
