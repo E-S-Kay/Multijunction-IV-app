@@ -179,11 +179,12 @@ fig.add_trace(go.Scatter(x=V_stack, y=J_common, mode="lines", name="Stack", line
 fig.add_trace(go.Scatter(x=[V_mpp_stack], y=[J_mpp_stack], mode="markers", name="Stack MPP",
                          marker=dict(color="red", size=10, symbol="x")))
 
-# Linien bei x=0 und y=0
-fig.add_shape(type="line", x0=0, x1=0, y0=min(J_common), y1=max(J_common),
-              line=dict(color="gray", dash="dash"))
-fig.add_shape(type="line", x0=min(V_stack), x1=max(V_stack), y0=0, y1=0,
-              line=dict(color="gray", dash="dash"))
+# Vertikale Linie bei x=0
+fig.add_vline(x=0, line=dict(color="gray", dash="dash"))
+
+# Horizontale Linie bei y=0
+fig.add_hline(y=0, line=dict(color="gray", dash="dash"))
+
 
 fig.update_layout(
     title="IV-Kennlinien",
