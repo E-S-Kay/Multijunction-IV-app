@@ -1,8 +1,8 @@
 import numpy as np
 import streamlit as st
 from scipy.optimize import root_scalar, fsolve
-import pandas as pd
 import plotly.graph_objects as go
+import pandas as pd
 
 # -----------------------------
 # Hilfsfunktionen
@@ -60,44 +60,15 @@ def calculate_iv(Jph_mA, J0_mA, n, Rs, Rsh, T, J_common):
 
     P_plot = V_vals * J_common
     idx_mpp = int(np.nanargmax(P_plot))
+    return V_vals, P_plot, Voc, V_vals[idx_mpp], J_common[idx_mpp], P_plot[idx_mpp]
 
-    # Jsc bei V=0 berechnen
-    try:
-        sol = root_scalar(lambda J: diode_equation_V(0.0, J/1000, cell), bracket=[0, Jph_mA*2], method="bisect")
-        Jsc = sol.root  # mA/cm²
-    except Exception:
-        Jsc = Jph_mA
-
-    Vmpp = V_vals[idx_mpp]
-    Jmpp = J_common[idx_mpp]
-    Pmpp = P_plot[idx_mpp]
-    FF = Pmpp / (Jsc * Voc) if Voc * Jsc != 0 else 0
-    PCE = Pmpp  # in mW/cm²
-
-    return V_vals, P_plot, Voc, Vmpp, Jmpp, Pmpp, Jsc, FF, PCE, cell
-
-def calculate_Jsc_tandem(cell1, cell2):
-    def V_sum_for_J(J_mA):
-        J = J_mA / 1000.0  # Umrechnung in A/cm²
-        # Schätze V1 und V2
-        try:
-            V1 = fsolve(lambda V: diode_equation_V(V, J, cell1), estimate_Voc(cell1))[0]
-        except:
-            V1 = 0
-        try:
-            V2 = fsolve(lambda V: diode_equation_V(V, J, cell2), estimate_Voc(cell2))[0]
-        except:
-            V2 = 0
-        return V1 + V2
-
-    try:
-        sol = root_scalar(V_sum_for_J, bracket=[0, max(cell1["Jph"], cell2["Jph"])*1000], method="bisect")
-        return sol.root  # mA/cm²
-    except:
-        return min(cell1["Jph"], cell2["Jph"])*1000
-
-
-
+def interpolate_Jsc(V, J):
+    idx = np.where(V >= 0)[0]
+    if len(idx) == 0 or idx[0] == 0:
+        return J[0]
+    i1 = idx[0] - 1
+    i2 = idx[0]
+    return J[i1] + (J[i2] - J[i1]) * (-V[i1]) / (V[i2] - V[i1])
 
 # -----------------------------
 # Streamlit UI
@@ -135,44 +106,59 @@ T2   = get_input("Zelle 2: Temperatur T [K]", 298.0)
 # -----------------------------
 J_common = np.linspace(0, max(Jph1, Jph2), 400)
 
-V1, P1, Voc1, V1_mpp, J1_mpp, P1_mpp, Jsc1, FF1, PCE1, cell1 = calculate_iv(Jph1, J01, n1, Rs1, Rsh1, T1, J_common)
-V2, P2, Voc2, V2_mpp, J2_mpp, P2_mpp, Jsc2, FF2, PCE2, cell2 = calculate_iv(Jph2, J02, n2, Rs2, Rsh2, T2, J_common)
+# Teilzellen
+V1, P1, Voc1, V1_mpp, J1_mpp, P1_mpp = calculate_iv(Jph1, J01, n1, Rs1, Rsh1, T1, J_common)
+V2, P2, Voc2, V2_mpp, J2_mpp, P2_mpp = calculate_iv(Jph2, J02, n2, Rs2, Rsh2, T2, J_common)
 
+# Tandem-Kombination
 V_tandem = V1 + V2
 P_tandem = V_tandem * J_common
 idx_mpp_t = int(np.nanargmax(P_tandem))
-Voc_tandem = V_tandem[0]
-V_mpp_t = V_tandem[idx_mpp_t]
-J_mpp_t = J_common[idx_mpp_t]
-P_mpp_t = P_tandem[idx_mpp_t]
-Jsc_tandem = calculate_Jsc_tandem(cell1, cell2)
-FF_t = P_mpp_t / (Jsc_tandem * Voc_tandem) if Voc_tandem * Jsc_tandem != 0 else 0
-PCE_t = P_mpp_t
+Voc_tandem = V_tandem[0]  # bei J=0
+V_mpp = V_tandem[idx_mpp_t]
+J_mpp = J_common[idx_mpp_t]
+P_mpp = P_tandem[idx_mpp_t]
 
 # -----------------------------
-# Tabelle anzeigen
+# Jsc-Berechnung mit Interpolation
 # -----------------------------
-data = {
-    "Zelle": ["Zelle 1", "Zelle 2", "Tandem"],
-    "Jsc [mA/cm²]": [Jsc1, Jsc2, Jsc_tandem],
-    "Voc [V]": [Voc1, Voc2, Voc_tandem],
-    "FF": [FF1, FF2, FF_t],
-    "PCE [mW/cm²]": [PCE1, PCE2, PCE_t],
-    "Jmpp [mA/cm²]": [J1_mpp, J2_mpp, J_mpp_t],
-    "Vmpp [V]": [V1_mpp, V2_mpp, V_mpp_t]
-}
-
-df = pd.DataFrame(data)
-st.write("### Photovoltaik-Parameter", df)
+Jsc1 = interpolate_Jsc(V1, J_common)
+Jsc2 = interpolate_Jsc(V2, J_common)
+Jsc_tandem = interpolate_Jsc(V_tandem, J_common)
 
 # -----------------------------
-# Interaktive IV-Kurven Plot
+# Ergebnisse als Tabelle
+# -----------------------------
+def calc_FF(Jsc, Voc, Jmpp, Vmpp):
+    if Jsc == 0 or Voc == 0:
+        return 0
+    return (Jmpp * Vmpp) / (Jsc * Voc)
+
+FF1 = calc_FF(Jsc1, Voc1, J1_mpp, V1_mpp)
+FF2 = calc_FF(Jsc2, Voc2, J2_mpp, V2_mpp)
+FF_tandem = calc_FF(Jsc_tandem, Voc_tandem, J_mpp, V_mpp)
+
+PCE1 = (P1_mpp / 100.0)  # mW/cm² bei 100 mW/cm² Einstrahlung
+PCE2 = (P2_mpp / 100.0)
+PCE_tandem = (P_mpp / 100.0)
+
+results = pd.DataFrame([
+    ["Zelle 1", f"{Jsc1:.2f}", f"{Voc1:.2f}", f"{FF1:.2f}", f"{PCE1:.2f}", f"{J1_mpp:.2f}", f"{V1_mpp:.2f}"],
+    ["Zelle 2", f"{Jsc2:.2f}", f"{Voc2:.2f}", f"{FF2:.2f}", f"{PCE2:.2f}", f"{J2_mpp:.2f}", f"{V2_mpp:.2f}"],
+    ["Tandem", f"{Jsc_tandem:.2f}", f"{Voc_tandem:.2f}", f"{FF_tandem:.2f}", f"{PCE_tandem:.2f}", f"{J_mpp:.2f}", f"{V_mpp:.2f}"]
+], columns=["Zelle", "Jsc [mA/cm²]", "Voc [V]", "FF", "PCE [%]", "Jmpp [mA/cm²]", "Vmpp [V]"])
+
+st.write("### Ergebnisse")
+st.table(results)
+
+# -----------------------------
+# Interaktive IV-Plots
 # -----------------------------
 fig1 = go.Figure()
 fig1.add_trace(go.Scatter(x=V1, y=J_common, mode="lines", name="Zelle 1"))
 fig1.add_trace(go.Scatter(x=V2, y=J_common, mode="lines", name="Zelle 2"))
 fig1.add_trace(go.Scatter(x=V_tandem, y=J_common, mode="lines", name="Tandem", line=dict(width=3)))
-fig1.add_trace(go.Scatter(x=[V_mpp_t], y=[J_mpp_t], mode="markers", name="Tandem MPP",
+fig1.add_trace(go.Scatter(x=[V_mpp], y=[J_mpp], mode="markers", name="Tandem MPP",
                           marker=dict(color="red", size=10, symbol="x")))
 fig1.update_layout(
     title="IV-Kennlinien",
