@@ -124,13 +124,15 @@ cells = []
 for i in range(num_cells):
     # Sidebar Container einfärben
     container = st.sidebar.container()
-    container.markdown(f"<div style='background-color:{pastel_colors[i]};padding:10px;border-radius:5px'>", unsafe_allow_html=True)
-    Jph = to_float(container.text_input(f"Zelle {i+1}: Jph [mA/cm²]", value="30.0" if i == 0 else "20.0"))
-    J0  = to_float(container.text_input(f"Zelle {i+1}: J0 [mA/cm²]", value="1e-10" if i == 0 else "1e-12"))
-    n   = to_float(container.text_input(f"Zelle {i+1}: Idealfaktor n", value="1.0"))
-    Rs  = to_float(container.text_input(f"Zelle {i+1}: Rs [Ohm·cm²]", value="0.2"))
-    Rsh = to_float(container.text_input(f"Zelle {i+1}: Rsh [Ohm·cm²]", value="1000.0"))
-    T   = to_float(container.text_input(f"Zelle {i+1}: Temperatur T [K]", value="298.0"))
+    container.markdown(
+        f"<div style='background-color:{pastel_colors[i]};padding:10px;border-radius:5px'>", unsafe_allow_html=True
+    )
+    Jph = to_float(container.text_input(f"Zelle {i+1}: Jph [mA/cm²]", value="30.0" if i == 0 else "20.0", key=f"Jph{i}"))
+    J0 = to_float(container.text_input(f"Zelle {i+1}: J0 [mA/cm²]", value="1e-10" if i == 0 else "1e-12", key=f"J0{i}"))
+    n = to_float(container.text_input(f"Zelle {i+1}: Idealfaktor n", value="1.0", key=f"n{i}"))
+    Rs = to_float(container.text_input(f"Zelle {i+1}: Rs [Ohm·cm²]", value="0.2", key=f"Rs{i}"))
+    Rsh = to_float(container.text_input(f"Zelle {i+1}: Rsh [Ohm·cm²]", value="1000.0", key=f"Rsh{i}"))
+    T = to_float(container.text_input(f"Zelle {i+1}: Temperatur T [K]", value="298.0", key=f"T{i}"))
     container.markdown("</div>", unsafe_allow_html=True)
     cells.append({"Jph": Jph, "J0": J0, "n": n, "Rs": Rs, "Rsh": Rsh, "T": T})
 
@@ -177,12 +179,15 @@ df = pd.DataFrame({
     "PCE [%]": [fmt(r["PCE"], 2) for r in rows],
     "Jmpp [mA/cm²]": [fmt(r["Jmpp"], 2) for r in rows],
     "Vmpp [V]": [fmt(r["Vmpp"], 3) for r in rows],
+    "color": [r["color"] for r in rows]
 })
 
-# Tabelle einfärben entsprechend den Kurven
-row_colors = [r["color"] for r in rows]
+def highlight_rows(row):
+    color = row['color']
+    return ['background-color: {}'.format(color)]*len(row)
+
 st.write("### Ergebnisse")
-st.table(df.style.set_properties(**{'background-color': pd.Series(row_colors)}).hide_index())
+st.table(df.style.apply(highlight_rows, axis=1).hide_index())
 
 # -----------------------------
 # Plot
@@ -194,7 +199,8 @@ for i, V in enumerate(V_all):
 
 # Stack nur plotten, wenn mehr als eine Zelle
 if num_cells > 1:
-    fig.add_trace(go.Scatter(x=V_stack, y=J_common, mode="lines", name="Stack", line=dict(color=stack_color, width=4)))
+    fig.add_trace(go.Scatter(x=V_stack, y=J_common, mode="lines", name="Stack",
+                             line=dict(color=stack_color, width=4)))
     fig.add_trace(go.Scatter(x=[V_mpp_stack], y=[J_mpp_stack], mode="markers", name="Stack MPP",
                              marker=dict(color=stack_color, size=10, symbol="x")))
 
