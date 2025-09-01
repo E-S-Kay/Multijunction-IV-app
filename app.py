@@ -200,8 +200,11 @@ fig.update_layout(
 
 # X-Achse nur bei Stack anpassen, ansonsten maximale Spannung der einzelnen Zelle
 if num_cells > 1:
-    fig.update_xaxes(range=[-0.2, Voc_stack + 0.1])
+    x_max = Voc_stack + 0.1
 else:
-    fig.update_xaxes(range=[-0.2, float(V_all[0][-1]) + 0.1])
+    x_max = rows[0]["Voc"] + 0.1  # Voc der einzelnen Zelle
+
+fig.update_xaxes(range=[-0.2, x_max])
+
 
 st.plotly_chart(fig, use_container_width=True)
