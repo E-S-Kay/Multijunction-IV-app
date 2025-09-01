@@ -1,27 +1,33 @@
-# 🔋 Tandemsolarzellen IV-Kennlinie (Streamlit App)
+# Multijunction Solar Cell IV Simulator
 
-Diese App berechnet und visualisiert die IV-Kennlinie einer Tandemsolarzelle mittels Eindiodengleichung für beide Teilzellen.
+This Streamlit app simulates the current-voltage (IV) characteristics of solar cells using the **single-diode model** with series and shunt resistances.  
+For multijunction solar cells, the subcell voltages are **added** to obtain the overall IV curve.
 
-## ✅ Funktionen
-- Eingabeparameter pro Zelle: Photostrom, Sättigungsstrom, Idealfaktor, Serien- & Parallelwiderstand
-- Darstellung der IV-Kennlinie beider Teilzellen + der Tandemzelle
-- Interaktive Oberfläche, sofortige grafische Ausgabe
+---
 
-## 🚀 Online verwenden (Streamlit Cloud)
-1. Erstelle ein GitHub-Konto
-2. Erstelle ein neues Repository (z. B. `tandem-iv-app`)
-3. Füge die Dateien `app.py` und `requirements.txt` ein
-4. Gehe auf https://streamlit.io/cloud
-5. Logge dich mit GitHub ein und klicke **"New app"**
-6. Wähle dein Repo, den Branch (z. B. `main`) und Datei `app.py`
-7. Klicke auf **Deploy**
+## ✨ Features
+- Simulate **1–4 subcells** individually and combined into a multijunction.
+- Adjustable parameters for each subcell:
+  - Photocurrent density (Jph)
+  - Saturation current density (J0)
+  - Ideality factor (n)
+  - Series resistance (Rs)
+  - Shunt resistance (Rsh)
+  - Temperature (T)
+- Interactive IV curve plotting with **Plotly**.
+- Automatic extraction of key metrics:
+  - Short-circuit current density (Jsc)
+  - Open-circuit voltage (Voc)
+  - Fill factor (FF)
+  - Maximum power point (Jmpp, Vmpp, Pmpp)
+  - Efficiency estimate (PCE)
+- Clear result table with color-coded rows.
 
-👉 Deine App ist nun unter einer öffentlichen URL erreichbar wie:  
-`https://dein-name-tandem-iv-app.streamlit.app`
+---
 
-## 📥 Beispielparameter
-- Jph = 30 mA/cm²
-- J0 = 1e-10 mA/cm²
-- n = 1.0
-- Rs = 0.2 Ohm·cm²
-- Rsh = 1000 Ohm·cm²
+## 🚀 Installation & Usage
+
+### 1. Clone the repository
+```bash
+git clone https://github.com/your-username/multijunction-iv-app.git
+cd multijunction-iv-app
