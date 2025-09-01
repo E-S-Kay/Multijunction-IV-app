@@ -5,9 +5,9 @@ from scipy import stats
 import plotly.graph_objects as go
 import pandas as pd
 
-# -------------------------------------------------
-# 1. Hilfsfunktionen (unverändert)
-# -------------------------------------------------
+# -----------------------------
+# Hilfsfunktionen
+# -----------------------------
 def safe_exp(x):
     return np.exp(np.clip(x, -700, 700))
 
@@ -31,8 +31,7 @@ def estimate_Voc(cell):
 def calculate_iv(Jph_mA, J0_mA, n, Rs, Rsh, T, J_common):
     Jph = float(Jph_mA) / 1000.0
     J0  = float(J0_mA) / 1000.0
-    cell = {"Jph": JJ0": J0, "n": float(n), "Rs": float(Rs),
-            "Rsh": float(Rsh), "T": float(T)}
+    cell = {"Jph": Jph, "J0": J0, "n": float(n), "Rs": float(Rs), "Rsh": float(Rsh), "T": float(T)}
 
     Voc = estimate_Voc(cell)
     V_vals = np.zeros_like(J_common, dtype=float)
@@ -50,8 +49,7 @@ def calculate_iv(Jph_mA, J0_mA, n, Rs, Rsh, T, J_common):
             pass
         if V_sol is None:
             try:
-                sol = fsolve(lambda V: diode_equation_V(V, J, cell),
-                             V_prev, maxfev=1000)
+                sol = fsolve(lambda V: diode_equation_V(V, J, cell), V_prev, maxfev=1000)
                 V_sol = float(sol[0])
             except Exception:
                 V_sol = float(V_prev)
@@ -106,152 +104,104 @@ def to_float(text, default=0.0):
     except Exception:
         return float(default)
 
-# -------------------------------------------------
-# 2. Streamlit UI
-# -------------------------------------------------
-st.title("IV‑Kennlinie: flexibel für 1–4 Teilzellen (Eindiodenmodell)")
+def fmt(x, dec=2):
+    if x is None or (isinstance(x, float) and np.isnan(x)):
+        return "NaN"
+    return f"{x:.{dec}f}"
+
+# -----------------------------
+# Streamlit UI
+# -----------------------------
+st.title("IV-Kennlinie: flexibel für 1–4 Teilzellen (Eindiodenmodell)")
 
 num_cells = st.sidebar.selectbox("Anzahl der Teilzellen", [1, 2, 3, 4], index=1)
 
 cells = []
 for i in range(num_cells):
     st.sidebar.subheader(f"Zelle {i+1}")
-    Jph = to_float(st.sidebar.text_input(f"Zelle {i+1}: Jph [mA/cm²]",
-                                         value="30.0" if i == 0 else "20.0"))
-    J0  = to_float(st.sidebar.text_input(f"Zelle {i+1}: J0 [mA/cm²]",
-                                         value="1e-10" if i == 0 else "1e-12"))
-    n   = to_float(st.sidebar.text_input(f"Zelle {i+1}: Idealfaktor n",
-                                         value="1.0"))
-    Rs  = to_float(st.sidebar.text_input(f"Zelle {i+1}: Rs [Ohm·cm²]",
-                                         value="0.2"))
-    Rsh = to_float(st.sidebar.text_input(f"Zelle {i+1}: Rsh [Ohm·cm²]",
-                                         value="1000.0"))
-    T   = to_float(st.sidebar.text_input(f"Zelle {i+1}: Temperatur T [K]",
-                                         value="298.0"))
-    cells.append({"Jph": Jph, "J0": J0, "n": n, "Rs": Rs,
-                  "Rsh": Rsh, "T": T})
+    Jph = to_float(st.sidebar.text_input(f"Zelle {i+1}: Jph [mA/cm²]", value="30.0" if i == 0 else "20.0"))
+    J0  = to_float(st.sidebar.text_input(f"Zelle {i+1}: J0 [mA/cm²]", value="1e-10" if i == 0 else "1e-12"))
+    n   = to_float(st.sidebar.text_input(f"Zelle {i+1}: Idealfaktor n", value="1.0"))
+    Rs  = to_float(st.sidebar.text_input(f"Zelle {i+1}: Rs [Ohm·cm²]", value="0.2"))
+    Rsh = to_float(st.sidebar.text_input(f"Zelle {i+1}: Rsh [Ohm·cm²]", value="1000.0"))
+    T   = to_float(st.sidebar.text_input(f"Zelle {i+1}: Temperatur T [K]", value="298.0"))
+    cells.append({"Jph": Jph, "J0": J0, "n": n, "Rs": Rs, "Rsh": Rsh, "T": T})
 
 J_common = np.linspace(0.0, max([c["Jph"] for c in cells]), 800)
 
 V_all, P_all, rows = [], [], []
 for i, c in enumerate(cells):
-    V, P, Voc, Vmpp, Jmpp, Pmpp, Jsc = calculate_iv(
-        c["Jph"], c["J0"], c["n"], c["Rs"], c["Rsh"], c["T"], J_common)
-    V_all.append(V)
-    P_all.append(P)
-
+    V, P, Voc, Vmpp, Jmpp, Pmpp, Jsc = calculate_iv(c["Jph"], c["J0"], c["n"], c["Rs"], c["Rsh"], c["T"], J_common)
+    V_all.append(V); P_all.append(P)
     FF = calc_FF(Jsc, Voc, Jmpp, Vmpp)
-
     rows.append({
         "Zelle": f"Zelle {i+1}",
-        "Jsc": Jsc,
-        "Voc": Voc,
-        "FF": FF,
-        "PCE": Pmpp,
-        "Jmpp": Jmpp,
-        "Vmpp": Vmpp
+        "Jsc": Jsc, "Voc": Voc, "FF": FF,
+        "PCE": Pmpp, "Jmpp": Jmpp, "Vmpp": Vmpp
     })
 
-# ---------- Stack ----------
-V_stack = np.sum(np.vstack(V_all), axis=0)
-P_stack = V_stack * J_common
-idx_mpp_stack = int(np.nanargmax(P_stack))
-Voc_stack = float(V_stack[0])
-V_mpp_stack = float(V_stack[idx_mpp_stack])
-J_mpp_stack = float(J_common[idx_mpp_stack])
-P_mpp_stack = float(P_stack[idx_mpp_stack])
-Jsc_stack = interpolate_Jsc_two_points_linreg(V_stack, J_common)
-FF_stack = calc_FF(Jsc_stack, Voc_stack, J_mpp_stack, V_mpp_stack)
+# Stack nur berechnen, wenn mehr als eine Zelle
+if num_cells > 1:
+    V_stack = np.sum(np.vstack(V_all), axis=0)
+    P_stack = V_stack * J_common
+    idx_mpp_stack = int(np.nanargmax(P_stack))
+    Voc_stack = float(V_stack[0])
+    V_mpp_stack = float(V_stack[idx_mpp_stack])
+    J_mpp_stack = float(J_common[idx_mpp_stack])
+    P_mpp_stack = float(P_stack[idx_mpp_stack])
+    Jsc_stack = interpolate_Jsc_two_points_linreg(V_stack, J_common)
+    FF_stack = calc_FF(Jsc_stack, Voc_stack, J_mpp_stack, V_mpp_stack)
 
-rows.append({
-    "Zelle": "Stack",
-    "Jsc": Jsc_stack,
-    "Voc": Voc_stack,
-    "FF": FF_stack,
-    "PCE": P_mpp_stack,
-    "Jmpp": J_mpp_stack,
-    "Vmpp": V_mpp_stack
+    rows.append({
+        "Zelle": "Stack", "Jsc": Jsc_stack, "Voc": Voc_stack,
+        "FF": FF_stack, "PCE": P_mpp_stack,
+        "Jmpp": J_mpp_stack, "Vmpp": V_mpp_stack
+    })
+
+# -----------------------------
+# Ergebnisse-Tabelle
+# -----------------------------
+df = pd.DataFrame({
+    "Zelle": [r["Zelle"] for r in rows],
+    "Jsc [mA/cm²]": [fmt(r["Jsc"], 2) for r in rows],
+    "Voc [V]": [fmt(r["Voc"], 3) for r in rows],
+    "FF [%]": [fmt(r["FF"]*100.0, 2) if (r["FF"] is not None and not np.isnan(r["FF"])) else "NaN" for r in rows],
+    "PCE [%]": [fmt(r["PCE"], 2) for r in rows],
+    "Jmpp [mA/cm²]": [fmt(r["Jmpp"], 2) for r in rows],
+    "Vmpp [V]": [fmt(r["Vmpp"], 3) for r in rows],
 })
-
-# -------------------------------------------------
-# 3. DataFrame erzeugen (numerisch)
-# -------------------------------------------------
-df = pd.DataFrame(rows)
-
-# Optional: Rundung der Werte (nützlich, wenn man später als CSV exportiert)
-df = df.round({
-    "Jsc": 2,     # 2 Nachkommastellen
-    "Voc": 3,
-    "FF": 4,      # 4 Nachkommastellen (Dezimal‑Form, später als % dargestellt)
-    "PCE": 2,
-    "Jmpp": 2,
-    "Vmpp": 3
-})
-
-# -------------------------------------------------
-# 4. Anzeige‑Format für Streamlit‑Tabelle
-# -------------------------------------------------
-#   - Jsc, Voc, Jmpp, Vmpp → feste Dezimalstellen
-#   - FF → Prozent‑Darstellung (FF * 100)
-#   - PCE → Prozent‑Darstellung (hier bereits in %)
-#   - NaN → "NaN"
-format_dict = {
-    "Jsc":   "{:,.2f}",
-    "Voc":   "{:,.3f}",
-    "FF":    "{:.2%}",   # automatisch *100 und %‑Zeichen
-    "PCE":   "{:,.2f}",
-    "Jmpp":  "{:,.2f}",
-    "Vmpp":  "{:,.3f}"
-}
-
-def nan_to_str(x):
-    """Ersetzt NaN durch das Wort 'NaN' und wandelt den Dezimalpunkt in ein Komma."""
-    if pd.isna(x):
-        return "NaN"
-    # Erst formatieren (wird von pandas übergeben)
-    s = str(x)
-    # Komma als Dezimaltrennzeichen (Deutsch)
-    return s.replace(".", ",")
-
-styled_df = (
-    df.style
-      .format(format_dict)
-      .map(nan_to_str)          # NaN → "NaN" und Punkt → Komma
-      .hide_index()
-)
 
 st.write("### Ergebnisse")
-st.table(styled_df)
+st.table(df)
 
-# -------------------------------------------------
-# 5. Plot
-# -------------------------------------------------
+# -----------------------------
+# Plot
+# -----------------------------
 fig = go.Figure()
 for i, V in enumerate(V_all):
-    fig.add_trace(go.Scatter(x=V, y=J_common,
-                             mode="lines",
-                             name=f"Zelle {i+1}"))
-fig.add_trace(go.Scatter(x=V_stack, y=J_common,
-                         mode="lines",
-                         name="Stack",
-                         line=dict(width=3)))
-fig.add_trace(go.Scatter(x=[V_mpp_stack], y=[J_mpp_stack],
-                         mode="markers",
-                         name="Stack MPP",
-                         marker=dict(color="red", size=10, symbol="x")))
+    fig.add_trace(go.Scatter(x=V, y=J_common, mode="lines", name=f"Zelle {i+1}"))
 
-# Hilfslinien bei x=0 und y=0
+# Stack nur plotten, wenn mehr als eine Zelle
+if num_cells > 1:
+    fig.add_trace(go.Scatter(x=V_stack, y=J_common, mode="lines", name="Stack", line=dict(width=3)))
+    fig.add_trace(go.Scatter(x=[V_mpp_stack], y=[J_mpp_stack], mode="markers", name="Stack MPP",
+                             marker=dict(color="red", size=10, symbol="x")))
+
+# Linien bei x=0 und y=0
 fig.add_vline(x=0, line=dict(color="gray", dash="dash"))
 fig.add_hline(y=0, line=dict(color="gray", dash="dash"))
 
 fig.update_layout(
-    title="IV‑Kennlinien",
+    title="IV-Kennlinien",
     xaxis_title="Spannung [V]",
     yaxis_title="Stromdichte [mA/cm²]",
     hovermode="x unified"
 )
 
-# x‑Achse etwas größer als Voc des Stacks
-fig.update_xaxes(range=[-0.2, Voc_stack + 0.1])
+# X-Achse nur bei Stack anpassen, ansonsten maximale Spannung der einzelnen Zelle
+if num_cells > 1:
+    fig.update_xaxes(range=[-0.2, Voc_stack + 0.1])
+else:
+    fig.update_xaxes(range=[-0.2, float(V_all[0][-1]) + 0.1])
 
 st.plotly_chart(fig, use_container_width=True)
