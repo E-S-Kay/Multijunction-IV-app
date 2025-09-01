@@ -233,3 +233,13 @@ x_max = Voc_stack + 0.1 if num_cells > 1 else rows[0]["Voc"] + 0.1
 fig.update_xaxes(range=[-0.2, x_max])
 
 st.plotly_chart(fig, use_container_width=True)
+
+# --- Footer / About Section ---
+st.markdown("---")
+st.markdown(
+    """
+    **Developed by:** Eike Köhnen (Helmholtz-Zentrum Berlin)  
+    **Contact (bugs, improvements, feedback):** [eike.koehnen@helmholtz-berlin.de](mailto:eike.koehnen@helmholtz-berlin.de)
+    """
+)
+
