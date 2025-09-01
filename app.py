@@ -1,6 +1,6 @@
 import numpy as np
 import streamlit as st
-from scipy.optimize import root_scalar, fsolve
+from scipy.optimize import root_scalar
 import plotly.graph_objects as go
 import pandas as pd
 
@@ -49,18 +49,25 @@ def calculate_iv(Jph_mA, J0_mA, n, Rs, Rsh, T, J_common):
         except Exception:
             pass
         if V_sol is None:
-            guess = V_prev
-            try:
-                sol = fsolve(lambda V: diode_equation_V(V, J, cell), guess)
-                V_sol = sol[0]
-            except Exception:
-                V_sol = guess
+            V_sol = V_prev
         V_vals[i] = V_sol
         V_prev = V_sol
 
     P_plot = V_vals * J_common
     idx_mpp = int(np.nanargmax(P_plot))
-    return V_vals, P_plot, Voc, V_vals[idx_mpp], J_common[idx_mpp], P_plot[idx_mpp]
+
+    # Jsc durch explizites Lösen der Diodengleichung bei V=0
+    try:
+        sol_jsc = root_scalar(lambda J: diode_equation_V(0.0, J/1000.0, cell),
+                              bracket=[0, Jph_mA*1.5], method="bisect")
+        if sol_jsc.converged:
+            Jsc = sol_jsc.root
+        else:
+            Jsc = Jph_mA
+    except Exception:
+        Jsc = Jph_mA
+
+    return V_vals, P_plot, Voc, V_vals[idx_mpp], J_common[idx_mpp], P_plot[idx_mpp], Jsc
 
 def interpolate_Jsc(V, J):
     idx = np.where(V >= 0)[0]
@@ -69,6 +76,11 @@ def interpolate_Jsc(V, J):
     i1 = idx[0] - 1
     i2 = idx[0]
     return J[i1] + (J[i2] - J[i1]) * (-V[i1]) / (V[i2] - V[i1])
+
+def calc_FF(Jsc, Voc, Jmpp, Vmpp):
+    if Jsc == 0 or Voc == 0:
+        return 0
+    return (Jmpp * Vmpp) / (Jsc * Voc)
 
 # -----------------------------
 # Streamlit UI
@@ -107,8 +119,8 @@ T2   = get_input("Zelle 2: Temperatur T [K]", 298.0)
 J_common = np.linspace(0, max(Jph1, Jph2), 400)
 
 # Teilzellen
-V1, P1, Voc1, V1_mpp, J1_mpp, P1_mpp = calculate_iv(Jph1, J01, n1, Rs1, Rsh1, T1, J_common)
-V2, P2, Voc2, V2_mpp, J2_mpp, P2_mpp = calculate_iv(Jph2, J02, n2, Rs2, Rsh2, T2, J_common)
+V1, P1, Voc1, V1_mpp, J1_mpp, P1_mpp, Jsc1 = calculate_iv(Jph1, J01, n1, Rs1, Rsh1, T1, J_common)
+V2, P2, Voc2, V2_mpp, J2_mpp, P2_mpp, Jsc2 = calculate_iv(Jph2, J02, n2, Rs2, Rsh2, T2, J_common)
 
 # Tandem-Kombination
 V_tandem = V1 + V2
@@ -119,26 +131,17 @@ V_mpp = V_tandem[idx_mpp_t]
 J_mpp = J_common[idx_mpp_t]
 P_mpp = P_tandem[idx_mpp_t]
 
-# -----------------------------
-# Jsc-Berechnung mit Interpolation
-# -----------------------------
-Jsc1 = interpolate_Jsc(V1, J_common)
-Jsc2 = interpolate_Jsc(V2, J_common)
+# Tandem Jsc über Interpolation
 Jsc_tandem = interpolate_Jsc(V_tandem, J_common)
 
 # -----------------------------
 # Ergebnisse als Tabelle
 # -----------------------------
-def calc_FF(Jsc, Voc, Jmpp, Vmpp):
-    if Jsc == 0 or Voc == 0:
-        return 0
-    return (Jmpp * Vmpp) / (Jsc * Voc)
-
 FF1 = calc_FF(Jsc1, Voc1, J1_mpp, V1_mpp)
 FF2 = calc_FF(Jsc2, Voc2, J2_mpp, V2_mpp)
 FF_tandem = calc_FF(Jsc_tandem, Voc_tandem, J_mpp, V_mpp)
 
-PCE1 = (P1_mpp / 100.0)  # mW/cm² bei 100 mW/cm² Einstrahlung
+PCE1 = (P1_mpp / 100.0)  
 PCE2 = (P2_mpp / 100.0)
 PCE_tandem = (P_mpp / 100.0)
 
